@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.routers import chat, admin
 from app.db.database import engine
@@ -14,25 +17,29 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# CORS 설정 — 개발 환경에서는 Vite dev server(5173) 허용
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"http://localhost:\d+",  # Vite가 포트 자동 증가해도 허용
+    allow_origins=[
+        "http://localhost:5173",       # 로컬 개발
+        "https://playdata.io",
+        "https://www.playdata.io",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 라우터 등록
+# 라우터 등록 — 반드시 정적 파일 마운트보다 먼저
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
-
-
-@app.get("/", tags=["Health"])
-def root():
-    return {"status": "ok", "message": "CodeAI 챗봇 API가 실행 중입니다."}
 
 
 @app.get("/health", tags=["Health"])
 def health_check():
     return {"status": "healthy"}
+
+
+# React 빌드 파일 서빙 — 빌드 결과물이 있을 때만 마운트
+STATIC_DIR = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+if STATIC_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")

@@ -7,3 +7,5 @@ sqlalchemy
 cryptography
 python-multipart
 aiofiles
+pdfplumber
+pytesseract

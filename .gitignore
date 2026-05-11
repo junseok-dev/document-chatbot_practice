@@ -156,3 +156,9 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# PDF 원본 문서 (대용량 + 내부 문서)
+data/pdfs/*.pdf
+
+# 챗봇 예상 질문 리스트 (내부 데이터)
+data/pdfs/챗봇 예상 질문 리스트.md

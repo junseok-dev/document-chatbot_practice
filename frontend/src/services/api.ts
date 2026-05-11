@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { ChatResponse, SuggestedQuestionsResponse, AdminSession, AdminSessionDetail } from '../types';
 
-const API_BASE_URL = 'http://localhost:8888/api';
+const API_BASE_URL = '/api';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
