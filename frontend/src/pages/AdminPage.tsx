@@ -27,7 +27,9 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
-    const savedPassword = (location.state as { password?: string })?.password;
+    const savedPassword =
+      sessionStorage.getItem('adminPassword') ??
+      (location.state as { password?: string })?.password;
     if (savedPassword) {
       setPassword(savedPassword);
       Promise.all([
@@ -37,7 +39,9 @@ export default function AdminPage() {
         setSessions(sessionData);
         setDocuments(docData.documents);
         setAuthed(true);
-      }).catch(() => {});
+      }).catch(() => {
+        sessionStorage.removeItem('adminPassword');
+      });
     }
   }, []);
 
@@ -52,6 +56,7 @@ export default function AdminPage() {
       ]);
       setSessions(sessionData);
       setDocuments(docData.documents);
+      sessionStorage.setItem('adminPassword', password);
       setAuthed(true);
     } catch {
       setError('비밀번호가 올바르지 않습니다.');
@@ -82,6 +87,7 @@ export default function AdminPage() {
     try {
       const result = await adminApi.changePassword(password, newPassword);
       setPwStatus(`✅ ${result.message}`);
+      sessionStorage.setItem('adminPassword', newPassword);
       setPassword(newPassword);
       setNewPassword('');
     } catch {

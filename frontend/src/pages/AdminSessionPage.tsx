@@ -15,7 +15,10 @@ export default function AdminSessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const password = (location.state as { password: string })?.password ?? '';
+  const password =
+    (location.state as { password: string })?.password ??
+    sessionStorage.getItem('adminPassword') ??
+    '';
 
   const [detail, setDetail] = useState<AdminSessionDetail | null>(null);
   const [error, setError] = useState('');
