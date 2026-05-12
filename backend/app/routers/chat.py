@@ -5,6 +5,7 @@ from app.models.chat import ChatRequest, ChatResponse, SuggestedQuestionsRespons
 from app.services.faq_service import search_faq, get_suggested_questions
 from app.services.document_service import search_documents
 from app.services.openai_service import get_ai_response
+from app.services.guardrail_service import check as guardrail_check
 from app.db.database import get_db
 from app.db.crud import get_or_create_session, save_message
 from app.utils.crypto import encrypt
@@ -35,6 +36,12 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     get_or_create_session(db, request.session_id, encrypted_name)
 
     save_message(db, request.session_id, "user", request.message, source="user")
+
+    # ── Step 0: 가드레일 검사 ────────────────────────────
+    blocked = guardrail_check(request.message)
+    if blocked:
+        save_message(db, request.session_id, "assistant", blocked, source="guardrail")
+        return ChatResponse(answer=blocked, source="guardrail", session_id=request.session_id)
 
     # ── Step 1: FAQ 우선 검색 ────────────────────────────
     faq_answer = search_faq(request.message)
