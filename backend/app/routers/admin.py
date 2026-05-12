@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Header
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, Header, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -6,6 +8,9 @@ from app.db.crud import get_all_sessions, get_session_messages
 from app.models.session import SessionSummary, SessionDetail, MessageDetail
 from app.config import get_settings
 from app.utils.crypto import decrypt
+from app.utils.pdf_converter import convert_pdf_to_md
+
+PDF_DIR = Path(__file__).resolve().parent.parent.parent.parent / "data" / "pdfs"
 
 router = APIRouter()
 
@@ -56,3 +61,21 @@ def get_session_detail(
         detail.content = decrypt(m.content) if m.content else ''
         decrypted_messages.append(detail)
     return SessionDetail(session=summary, messages=decrypted_messages)
+
+
+@router.post("/upload-pdf")
+async def upload_pdf(
+    file: UploadFile = File(...),
+    _: None = Depends(verify_admin),
+):
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="PDF 파일만 업로드 가능합니다.")
+
+    PDF_DIR.mkdir(parents=True, exist_ok=True)
+    pdf_path = PDF_DIR / file.filename
+    pdf_path.write_bytes(await file.read())
+
+    settings = get_settings()
+    md_path = await convert_pdf_to_md(pdf_path, settings.openai_api_key)
+
+    return {"message": "변환 완료. 챗봇에 즉시 반영되었습니다.", "md_file": md_path.name}
