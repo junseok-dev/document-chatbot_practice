@@ -10,3 +10,4 @@ aiofiles
 pdfplumber
 pytesseract
 pypdfium2
+chromadb

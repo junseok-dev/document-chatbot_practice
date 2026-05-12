@@ -78,4 +78,9 @@ async def upload_pdf(
     settings = get_settings()
     md_path = await convert_pdf_to_md(pdf_path, settings.openai_api_key)
 
+    import asyncio
+    from app.services.rag_service import get_rag_service
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, get_rag_service().index_all)
+
     return {"message": "변환 완료. 챗봇에 즉시 반영되었습니다.", "md_file": md_path.name}

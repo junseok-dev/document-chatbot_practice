@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -9,13 +10,25 @@ from app.routers import chat, admin
 from app.db.database import engine
 from app.db import models
 
-# DB 테이블 자동 생성
 models.Base.metadata.create_all(bind=engine)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    import asyncio
+    from app.services.rag_service import get_rag_service
+    rag = get_rag_service()
+    if rag._col.count() == 0:
+        loop = asyncio.get_event_loop()
+        loop.run_in_executor(None, rag.index_all)
+    yield
+
 
 app = FastAPI(
     title="CodeAI 교육 상담 챗봇 API",
     description="FAQ + Markdown 문서 기반 교육 과정 안내 챗봇 백엔드",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
