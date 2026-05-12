@@ -1,10 +1,13 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, HelpCircle } from 'lucide-react';
+import { GoogleLogin } from '@react-oauth/google';
+import { ArrowLeft, LogOut } from 'lucide-react';
 import ChatWindow from '../components/chat/ChatWindow';
+import { useAuth } from '../hooks/useAuth';
 
 const ChatPage: React.FC = () => {
   const navigate = useNavigate();
+  const { googleUser, loginWithGoogle, logout } = useAuth();
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 overflow-hidden">
@@ -29,10 +32,40 @@ const ChatPage: React.FC = () => {
               </div>
             </div>
           </div>
-          
-          <button className="text-gray-400 hover:text-gray-600 transition-colors p-2" title="도움말">
-            <HelpCircle size={20} />
-          </button>
+
+          {/* Auth */}
+          <div className="flex items-center gap-2">
+            {googleUser ? (
+              <div className="flex items-center gap-2">
+                <img
+                  src={googleUser.picture}
+                  alt={googleUser.name}
+                  className="w-8 h-8 rounded-full border border-gray-200"
+                />
+                <span className="text-sm font-medium text-gray-700 hidden sm:block">
+                  {googleUser.name}
+                </span>
+                <button
+                  onClick={logout}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+                  title="로그아웃"
+                >
+                  <LogOut size={16} />
+                </button>
+              </div>
+            ) : (
+              <div className="scale-90 origin-right">
+                <GoogleLogin
+                  onSuccess={res => res.credential && loginWithGoogle(res.credential)}
+                  onError={() => console.error('Google 로그인 실패')}
+                  useOneTap
+                  text="signin"
+                  shape="pill"
+                  size="medium"
+                />
+              </div>
+            )}
+          </div>
         </div>
       </header>
 

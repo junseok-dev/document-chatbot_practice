@@ -1,8 +1,29 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Message, SuggestedQuestion } from '../types';
 import { chatApi } from '../services/api';
+import { getStoredGoogleUser } from './useAuth';
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
+
+const getOrCreateSessionId = (): string => {
+  const googleUser = getStoredGoogleUser();
+  if (googleUser) {
+    // Google 유저: localStorage에 저장 → 브라우저 재시작해도 유지
+    const key = `chatSessionId_${googleUser.sub}`;
+    const stored = localStorage.getItem(key);
+    if (stored) return stored;
+    const newId = `gsession_${Date.now()}_${generateId()}`;
+    localStorage.setItem(key, newId);
+    return newId;
+  } else {
+    // 비회원: sessionStorage에 저장 → 브라우저 닫으면 초기화
+    const stored = sessionStorage.getItem('chatSessionId');
+    if (stored) return stored;
+    const newId = `session_${Date.now()}_${generateId()}`;
+    sessionStorage.setItem('chatSessionId', newId);
+    return newId;
+  }
+};
 
 export const useChat = () => {
   const [messages, setMessages] = useState<Message[]>([{
@@ -13,9 +34,8 @@ export const useChat = () => {
   }]);
   const [isLoading, setIsLoading] = useState(false);
   const [suggestedQuestions, setSuggestedQuestions] = useState<SuggestedQuestion[]>([]);
-  
-  // 세션 ID는 한 번 생성 후 유지
-  const sessionIdRef = useRef(`session_${Date.now()}_${generateId()}`);
+
+  const sessionIdRef = useRef(getOrCreateSessionId());
 
   useEffect(() => {
     // 추천 질문 초기 로드
@@ -38,7 +58,12 @@ export const useChat = () => {
     setIsLoading(true);
 
     try {
-      const response = await chatApi.sendMessage(sessionIdRef.current, content);
+      const googleUser = getStoredGoogleUser();
+      const response = await chatApi.sendMessage(
+        sessionIdRef.current,
+        content,
+        googleUser?.name,
+      );
       
       const botMessage: Message = {
         id: generateId(),
