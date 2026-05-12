@@ -33,6 +33,10 @@ PDF_TO_MD = {
     "과정상세내용_머신러닝 엔지니어.pdf": "course_ml_engineer.md",
     "플레이데이터 캠퍼스 정보.pdf": "campus_info.md",
     "국민내일배움카드_발급자격.pdf": "national_training_card.md",
+    "플레이데이터 소개서_편집본_260508.pdf": "playdata_intro.md",
+    "홈페이지_소개.pdf": "homepage_intro.md",
+    "국민내일배움카드 운영규정(고용노동부고시)(제2026-101호)(20260101).pdf": "national_training_card_regulation.md",
+    "현장 실무인재 양성을 위한 직업능력개발훈련 운영규정(고용노동부고시)(제2026-32호)(20260505).pdf": "vocational_training_regulation.md",
 }
 
 QUESTION_LIST_PATH = PDF_DIR / "챗봇 예상 질문 리스트.md"
