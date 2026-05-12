@@ -39,14 +39,32 @@ QUESTION_LIST_PATH = PDF_DIR / "챗봇 예상 질문 리스트.md"
 
 
 def extract_pdf_text(pdf_path: Path) -> str:
-    """PDF에서 텍스트 추출 (페이지별)"""
+    """PDF에서 텍스트 + 표 추출 (페이지별)"""
     pages = []
     with pdfplumber.open(pdf_path) as pdf:
         for page in pdf.pages:
+            parts = []
+
             text = page.extract_text()
             if text and text.strip():
-                pages.append(text.strip())
-    return "\n\n".join(pages)
+                parts.append(text.strip())
+
+            tables = page.extract_tables()
+            for table in tables:
+                if not table:
+                    continue
+                rows = []
+                for i, row in enumerate(table):
+                    cells = [str(c).strip() if c else "" for c in row]
+                    rows.append("| " + " | ".join(cells) + " |")
+                    if i == 0:
+                        rows.append("| " + " | ".join(["---"] * len(row)) + " |")
+                parts.append("\n".join(rows))
+
+            if parts:
+                pages.append("\n\n".join(parts))
+
+    return "\n\n---\n\n".join(pages)
 
 
 def ocr_pdf_with_tesseract(pdf_path: Path) -> str:

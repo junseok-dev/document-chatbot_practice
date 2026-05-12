@@ -24,10 +24,28 @@ def _extract_pdf_text(pdf_path: Path) -> str:
     pages = []
     with pdfplumber.open(pdf_path) as pdf:
         for page in pdf.pages:
+            parts = []
+
             text = page.extract_text()
             if text and text.strip():
-                pages.append(text.strip())
-    return "\n\n".join(pages)
+                parts.append(text.strip())
+
+            tables = page.extract_tables()
+            for table in tables:
+                if not table:
+                    continue
+                rows = []
+                for i, row in enumerate(table):
+                    cells = [str(c).strip() if c else "" for c in row]
+                    rows.append("| " + " | ".join(cells) + " |")
+                    if i == 0:
+                        rows.append("| " + " | ".join(["---"] * len(row)) + " |")
+                parts.append("\n".join(rows))
+
+            if parts:
+                pages.append("\n\n".join(parts))
+
+    return "\n\n---\n\n".join(pages)
 
 
 def _ocr_pdf(pdf_path: Path) -> str:
@@ -45,22 +63,35 @@ def _ocr_pdf(pdf_path: Path) -> str:
 
 def _structure_as_markdown(raw_text: str, api_key: str) -> str:
     client = OpenAI(api_key=api_key)
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "PDF에서 추출한 텍스트를 Markdown 형식으로 정리해주세요. "
-                    "원본 내용을 그대로 유지하면서 헤딩(#, ##), 리스트, 표를 적절히 사용해주세요. "
-                    "페이지 번호, 머리글, 바닥글처럼 반복되는 불필요한 내용은 제거해주세요."
-                ),
-            },
-            {"role": "user", "content": raw_text},
-        ],
-        max_tokens=4000,
-    )
-    return response.choices[0].message.content.strip()
+
+    # 긴 문서는 청크로 나눠 처리
+    max_chars = 12000
+    if len(raw_text) <= max_chars:
+        chunks = [raw_text]
+    else:
+        chunks = [raw_text[i:i + max_chars] for i in range(0, len(raw_text), max_chars)]
+
+    results = []
+    for chunk in chunks:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "PDF에서 추출한 텍스트를 Markdown 형식으로 정리해주세요. "
+                        "원본 내용을 빠짐없이 유지하면서 헤딩(#, ##), 리스트, 표를 적절히 사용해주세요. "
+                        "페이지 번호, 머리글, 바닥글처럼 반복되는 불필요한 내용만 제거하세요. "
+                        "내용을 요약하거나 생략하지 마세요."
+                    ),
+                },
+                {"role": "user", "content": chunk},
+            ],
+            max_tokens=8000,
+        )
+        results.append(response.choices[0].message.content.strip())
+
+    return "\n\n".join(results)
 
 
 def _pdf_to_md_filename(pdf_name: str) -> str:
