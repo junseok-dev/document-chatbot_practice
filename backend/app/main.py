@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.routers import chat, admin
@@ -39,7 +40,11 @@ def health_check():
     return {"status": "healthy"}
 
 
-# React 빌드 파일 서빙 — 빌드 결과물이 있을 때만 마운트
 STATIC_DIR = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+
 if STATIC_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+    app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        return FileResponse(str(STATIC_DIR / "index.html"))
