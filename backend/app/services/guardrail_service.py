@@ -26,8 +26,8 @@ _PROFANITY = [
 
 # ── 프롬프트 인젝션 ────────────────────────────────────────────────────────────
 _INJECTION_PATTERNS = [
-    r"시스템\s*프롬프트\s*(무시|잊|바꿔|변경|알려|출력)",
-    r"(이전|앞|위)\s*(지시|명령|프롬프트)\s*(무시|잊어|바꿔)",
+    r"시스템\s*프롬프트\s*(을|를)?\s*(무시|잊|바꿔|변경|알려|출력)",
+    r"(이전|앞|위)\s*(지시|명령|프롬프트)\s*(을|를|이|가)?\s*(무시|잊어|바꿔)",
     r"너는?\s*이제\s*(다른|새로운)?\s*(ai|챗봇|로봇)",
     r"(ignore|forget|disregard)\s*(all\s*)?(previous|prior|above)\s*(instructions?|prompts?|rules?)",
     r"(act|pretend|behave|respond)\s*(as|like)\s*(if\s*you\s*(are|were))?",
