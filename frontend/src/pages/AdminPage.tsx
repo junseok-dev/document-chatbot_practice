@@ -121,6 +121,37 @@ export default function AdminPage() {
               {loading ? '확인 중...' : '로그인'}
             </button>
           </form>
+
+          <hr className="my-5 border-gray-200" />
+          <p className="text-xs font-medium text-gray-500 mb-3">🔒 비밀번호 변경</p>
+          <div className="space-y-2">
+            <input
+              type="password"
+              placeholder="현재 비밀번호"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+            <input
+              type="password"
+              placeholder="새 비밀번호"
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+            <button
+              onClick={changePassword}
+              disabled={!password || !newPassword}
+              className="w-full bg-gray-700 text-white rounded-lg py-2 text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
+            >
+              변경
+            </button>
+            {pwStatus && (
+              <p className={`text-sm ${pwStatus.startsWith('✅') ? 'text-green-600' : 'text-red-500'}`}>
+                {pwStatus}
+              </p>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -174,32 +205,6 @@ export default function AdminPage() {
                 </li>
               ))}
             </ul>
-          )}
-        </div>
-
-        {/* 비밀번호 변경 */}
-        <div className="bg-white rounded-xl shadow p-6 mb-6">
-          <h2 className="text-lg font-bold text-gray-800 mb-4">🔒 비밀번호 변경</h2>
-          <div className="flex items-center gap-3">
-            <input
-              type="password"
-              placeholder="새 비밀번호"
-              value={newPassword}
-              onChange={e => setNewPassword(e.target.value)}
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-            <button
-              onClick={changePassword}
-              disabled={!newPassword}
-              className="bg-gray-700 text-white px-5 py-2 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50 whitespace-nowrap"
-            >
-              변경
-            </button>
-          </div>
-          {pwStatus && (
-            <p className={`mt-3 text-sm ${pwStatus.startsWith('✅') ? 'text-green-600' : 'text-red-500'}`}>
-              {pwStatus}
-            </p>
           )}
         </div>
 
