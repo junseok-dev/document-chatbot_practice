@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminApi } from '../services/api';
 import { AdminSession } from '../types';
@@ -9,7 +9,27 @@ export default function AdminPage() {
   const [sessions, setSessions] = useState<AdminSession[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [uploadStatus, setUploadStatus] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+
+  const uploadPdf = async () => {
+    if (!pdfFile) return;
+    setUploading(true);
+    setUploadStatus('업로드 중... (변환에 1~2분 소요될 수 있습니다)');
+    try {
+      const result = await adminApi.uploadPdf(password, pdfFile);
+      setUploadStatus(`✅ ${result.message}`);
+      setPdfFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch {
+      setUploadStatus('❌ 업로드 실패. 파일을 확인해주세요.');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const login = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,6 +76,34 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-5xl mx-auto">
+
+        {/* PDF 업로드 */}
+        <div className="bg-white rounded-xl shadow p-6 mb-6">
+          <h2 className="text-lg font-bold text-gray-800 mb-4">📄 문서 업로드</h2>
+          <p className="text-sm text-gray-500 mb-4">PDF를 업로드하면 자동으로 변환되어 챗봇에 즉시 반영됩니다.</p>
+          <div className="flex items-center gap-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf"
+              onChange={e => setPdfFile(e.target.files?.[0] ?? null)}
+              className="flex-1 text-sm text-gray-600 border border-gray-300 rounded-lg px-3 py-2"
+            />
+            <button
+              onClick={uploadPdf}
+              disabled={!pdfFile || uploading}
+              className="bg-brand-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-brand-700 disabled:opacity-50 whitespace-nowrap"
+            >
+              {uploading ? '변환 중...' : '업로드'}
+            </button>
+          </div>
+          {uploadStatus && (
+            <p className={`mt-3 text-sm ${uploadStatus.startsWith('✅') ? 'text-green-600' : uploadStatus.startsWith('❌') ? 'text-red-500' : 'text-gray-500'}`}>
+              {uploadStatus}
+            </p>
+          )}
+        </div>
+
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-gray-800">상담 세션 목록</h1>
           <span className="text-sm text-gray-500">총 {sessions.length}건</span>

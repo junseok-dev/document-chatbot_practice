@@ -38,4 +38,13 @@ export const adminApi = {
     });
     return response.data;
   },
+
+  uploadPdf: async (password: string, file: File): Promise<{ message: string; md_file: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await axios.post(`${API_BASE_URL}/admin/upload-pdf`, formData, {
+      headers: { 'x-admin-password': password },
+    });
+    return response.data;
+  },
 };

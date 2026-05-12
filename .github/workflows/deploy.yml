@@ -1,0 +1,33 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_KEY }}
+          envs: OPENAI_API_KEY,ENCRYPTION_KEY,ADMIN_PASSWORD
+          script: |
+            cd ~/document-chatbot_practice
+            git pull
+            cat > backend/.env << EOF
+            OPENAI_API_KEY=$OPENAI_API_KEY
+            ENCRYPTION_KEY=$ENCRYPTION_KEY
+            ADMIN_PASSWORD=$ADMIN_PASSWORD
+            EOF
+            source backend/venv/bin/activate
+            pip install -r backend/requirements.txt
+            cd frontend && npm install && npm run build
+            sudo systemctl restart chatbot
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
