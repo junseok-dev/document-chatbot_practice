@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useRef, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { adminApi } from '../services/api';
 import { AdminSession } from '../types';
 
@@ -12,8 +12,53 @@ export default function AdminPage() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [documents, setDocuments] = useState<string[]>([]);
+  const [newPassword, setNewPassword] = useState('');
+  const [pwStatus, setPwStatus] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const loadDocuments = async (pw: string) => {
+    try {
+      const res = await adminApi.getDocuments(pw);
+      setDocuments(res.documents);
+    } catch {}
+  };
+
+  useEffect(() => {
+    const savedPassword = (location.state as { password?: string })?.password;
+    if (savedPassword) {
+      setPassword(savedPassword);
+      Promise.all([
+        adminApi.getSessions(savedPassword),
+        adminApi.getDocuments(savedPassword),
+      ]).then(([sessionData, docData]) => {
+        setSessions(sessionData);
+        setDocuments(docData.documents);
+        setAuthed(true);
+      }).catch(() => {});
+    }
+  }, []);
+
+  const login = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const [sessionData, docData] = await Promise.all([
+        adminApi.getSessions(password),
+        adminApi.getDocuments(password),
+      ]);
+      setSessions(sessionData);
+      setDocuments(docData.documents);
+      setAuthed(true);
+    } catch {
+      setError('비밀번호가 올바르지 않습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const uploadPdf = async () => {
     if (!pdfFile) return;
@@ -24,6 +69,7 @@ export default function AdminPage() {
       setUploadStatus(`✅ ${result.message}`);
       setPdfFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
+      await loadDocuments(password);
     } catch {
       setUploadStatus('❌ 업로드 실패. 파일을 확인해주세요.');
     } finally {
@@ -31,18 +77,25 @@ export default function AdminPage() {
     }
   };
 
-  const login = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
+  const changePassword = async () => {
+    if (!newPassword) return;
     try {
-      const data = await adminApi.getSessions(password);
-      setSessions(data);
-      setAuthed(true);
+      const result = await adminApi.changePassword(password, newPassword);
+      setPwStatus(`✅ ${result.message}`);
+      setPassword(newPassword);
+      setNewPassword('');
     } catch {
-      setError('비밀번호가 올바르지 않습니다.');
-    } finally {
-      setLoading(false);
+      setPwStatus('❌ 변경 실패.');
+    }
+  };
+
+  const deleteDocument = async (filename: string) => {
+    if (!confirm(`"${filename}" 을 삭제할까요?`)) return;
+    try {
+      await adminApi.deleteDocument(password, filename);
+      await loadDocuments(password);
+    } catch {
+      alert('삭제 실패.');
     }
   };
 
@@ -77,11 +130,12 @@ export default function AdminPage() {
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-5xl mx-auto">
 
-        {/* PDF 업로드 */}
+        {/* 문서 관리 */}
         <div className="bg-white rounded-xl shadow p-6 mb-6">
-          <h2 className="text-lg font-bold text-gray-800 mb-4">📄 문서 업로드</h2>
-          <p className="text-sm text-gray-500 mb-4">PDF를 업로드하면 자동으로 변환되어 챗봇에 즉시 반영됩니다.</p>
-          <div className="flex items-center gap-3">
+          <h2 className="text-lg font-bold text-gray-800 mb-4">📄 문서 관리</h2>
+
+          {/* 업로드 */}
+          <div className="flex items-center gap-3 mb-4">
             <input
               ref={fileInputRef}
               type="file"
@@ -98,12 +152,58 @@ export default function AdminPage() {
             </button>
           </div>
           {uploadStatus && (
-            <p className={`mt-3 text-sm ${uploadStatus.startsWith('✅') ? 'text-green-600' : uploadStatus.startsWith('❌') ? 'text-red-500' : 'text-gray-500'}`}>
+            <p className={`mb-4 text-sm ${uploadStatus.startsWith('✅') ? 'text-green-600' : uploadStatus.startsWith('❌') ? 'text-red-500' : 'text-gray-500'}`}>
               {uploadStatus}
+            </p>
+          )}
+
+          {/* 문서 목록 */}
+          {documents.length === 0 ? (
+            <p className="text-sm text-gray-400">등록된 문서가 없습니다.</p>
+          ) : (
+            <ul className="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden">
+              {documents.map(doc => (
+                <li key={doc} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
+                  <span className="text-sm text-gray-700">{doc}</span>
+                  <button
+                    onClick={() => deleteDocument(doc)}
+                    className="text-red-500 hover:text-red-700 text-sm font-medium"
+                  >
+                    삭제
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* 비밀번호 변경 */}
+        <div className="bg-white rounded-xl shadow p-6 mb-6">
+          <h2 className="text-lg font-bold text-gray-800 mb-4">🔒 비밀번호 변경</h2>
+          <div className="flex items-center gap-3">
+            <input
+              type="password"
+              placeholder="새 비밀번호"
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+            <button
+              onClick={changePassword}
+              disabled={!newPassword}
+              className="bg-gray-700 text-white px-5 py-2 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50 whitespace-nowrap"
+            >
+              변경
+            </button>
+          </div>
+          {pwStatus && (
+            <p className={`mt-3 text-sm ${pwStatus.startsWith('✅') ? 'text-green-600' : 'text-red-500'}`}>
+              {pwStatus}
             </p>
           )}
         </div>
 
+        {/* 상담 세션 목록 */}
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-gray-800">상담 세션 목록</h1>
           <span className="text-sm text-gray-500">총 {sessions.length}건</span>

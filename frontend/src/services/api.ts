@@ -47,4 +47,26 @@ export const adminApi = {
     });
     return response.data;
   },
+
+  getDocuments: async (password: string): Promise<{ documents: string[] }> => {
+    const response = await apiClient.get('/admin/documents', {
+      headers: { 'x-admin-password': password },
+    });
+    return response.data;
+  },
+
+  deleteDocument: async (password: string, filename: string): Promise<{ message: string }> => {
+    const response = await apiClient.delete(`/admin/documents/${encodeURIComponent(filename)}`, {
+      headers: { 'x-admin-password': password },
+    });
+    return response.data;
+  },
+
+  changePassword: async (password: string, newPassword: string): Promise<{ message: string }> => {
+    const response = await apiClient.put('/admin/password',
+      { new_password: newPassword },
+      { headers: { 'x-admin-password': password } }
+    );
+    return response.data;
+  },
 };

@@ -49,7 +49,7 @@ export default function AdminSessionPage() {
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-3xl mx-auto">
         <button
-          onClick={() => navigate('/admin')}
+          onClick={() => navigate('/admin', { state: { password } })}
           className="text-brand-600 hover:text-brand-800 text-sm font-medium mb-4 flex items-center gap-1"
         >
           ← 목록으로
