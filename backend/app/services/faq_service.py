@@ -1,4 +1,5 @@
 import json
+from difflib import SequenceMatcher
 from pathlib import Path
 
 FAQ_PATH = Path(__file__).parent.parent.parent.parent / "data" / "faq" / "faq.json"
@@ -76,6 +77,21 @@ def _normalize(text: str) -> str:
     return result
 
 
+def _keyword_in_query(keyword: str, query: str, threshold: float = 0.82) -> bool:
+    """정확 매칭 우선, 실패 시 슬라이딩 윈도우 퍼지 매칭으로 오타 허용."""
+    if keyword in query:
+        return True
+    # 2자 이하 키워드는 오타 허용 시 오매칭 위험 → 정확 매칭만
+    if len(keyword) <= 2:
+        return False
+    kw_len = len(keyword)
+    for i in range(len(query) - kw_len + 1):
+        ratio = SequenceMatcher(None, keyword, query[i:i + kw_len]).ratio()
+        if ratio >= threshold:
+            return True
+    return False
+
+
 def _load_faq_data() -> dict:
     if not FAQ_PATH.exists():
         return {"faqs": [], "suggested_questions": []}
@@ -102,7 +118,7 @@ def search_faq(query: str) -> str | None:
     best_score = 0
 
     for faq in data.get("faqs", []):
-        score = sum(len(kw) for kw in faq.get("keywords", []) if _normalize(kw) in query_lower)
+        score = sum(len(kw) for kw in faq.get("keywords", []) if _keyword_in_query(_normalize(kw), query_lower))
         if score > best_score:
             best_score = score
             best_answer = faq["answer"]
