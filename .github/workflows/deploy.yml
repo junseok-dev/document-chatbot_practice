@@ -14,7 +14,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_KEY }}
-          envs: OPENAI_API_KEY,ENCRYPTION_KEY,ADMIN_PASSWORD
+          envs: OPENAI_API_KEY,ENCRYPTION_KEY,ADMIN_PASSWORD,VITE_GOOGLE_CLIENT_ID
           script: |
             cd ~/document-chatbot_practice
             git pull
@@ -23,6 +23,7 @@ jobs:
             ENCRYPTION_KEY=$ENCRYPTION_KEY
             ADMIN_PASSWORD=$ADMIN_PASSWORD
             EOF
+            echo "VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID" > frontend/.env
             source backend/venv/bin/activate
             pip install -r backend/requirements.txt
             cd frontend && npm install && npm run build
@@ -31,3 +32,4 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
