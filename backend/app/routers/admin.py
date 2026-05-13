@@ -76,8 +76,7 @@ async def upload_pdf(
     pdf_path = PDF_DIR / file.filename
     pdf_path.write_bytes(await file.read())
 
-    settings = get_settings()
-    md_path = await convert_pdf_to_md(pdf_path, settings.openai_api_key)
+    md_path = await convert_pdf_to_md(pdf_path)
 
     import asyncio
     from app.services.rag_service import get_rag_service

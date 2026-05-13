@@ -162,3 +162,7 @@ data/pdfs/*.pdf
 
 # 챗봇 예상 질문 리스트 (내부 데이터)
 data/pdfs/챗봇 예상 질문 리스트.md
+
+# 오리지널 pdf, md 데이터 보관용 
+original_data/
+

@@ -3,7 +3,7 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
-  source?: 'faq' | 'document' | 'ai' | 'fallback';
+  source?: 'faq' | 'document' | 'ai' | 'fallback' | 'guardrail';
 }
 
 export interface AdminSession {
@@ -36,7 +36,7 @@ export interface SuggestedQuestion {
 
 export interface ChatResponse {
   answer: string;
-  source: 'faq' | 'document' | 'fallback';
+  source: 'faq' | 'document' | 'ai' | 'fallback' | 'guardrail';
   session_id: string;
 }
 

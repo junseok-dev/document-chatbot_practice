@@ -1,0 +1,96 @@
+{
+  "documents": [
+    {
+      "path": "privacy_law.md",
+      "title": "개인정보 보호법",
+      "category": "법률",
+      "source": "개인정보 보호법(법률)(제20897호)(20251002).pdf"
+    },
+    {
+      "path": "fair_labeling_law.md",
+      "title": "표시·광고의 공정화에 관한 법률",
+      "category": "법률",
+      "source": "표시ㆍ광고의 공정화에 관한 법률(법률)(제20712호)(20250121).pdf"
+    },
+    {
+      "path": "national_training_card_regulation.md",
+      "title": "국민내일배움카드 운영규정",
+      "category": "운영규정",
+      "source": "국민내일배움카드 운영규정(고용노동부고시)(제2026-101호)(20260101).pdf"
+    },
+    {
+      "path": "national_training_card_eligibility.md",
+      "title": "국민내일배움카드 발급자격",
+      "category": "운영규정",
+      "source": "국민내일배움카드_발급자격.pdf"
+    },
+    {
+      "path": "vocational_training_regulation.md",
+      "title": "현장 실무인재 양성을 위한 직업능력개발훈련 운영규정",
+      "category": "운영규정",
+      "source": "현장 실무인재 양성을 위한 직업능력개발훈련 운영규정(고용노동부고시)(제2026-32호)(20260505).pdf"
+    },
+    {
+      "path": "course_ai_orchestration.md",
+      "title": "AI 오케스트레이션 과정 상세",
+      "category": "과정 상세",
+      "source": "과정상세내용_AI 오케스트레이션.pdf"
+    },
+    {
+      "path": "course_mlops.md",
+      "title": "MLOps 엔지니어 과정 상세",
+      "category": "과정 상세",
+      "source": "과정상세내용_MLOps 엔지니어.pdf"
+    },
+    {
+      "path": "course_ml_engineer.md",
+      "title": "머신러닝 엔지니어 과정 상세",
+      "category": "과정 상세",
+      "source": "과정상세내용_머신러닝 엔지니어.pdf"
+    },
+    {
+      "path": "playdata_intro.md",
+      "title": "플레이데이터 기관 정보 소개",
+      "category": "플레이데이터 정보",
+      "source": "플레이데이터_ 기관정보_소개서.pdf"
+    },
+    {
+      "path": "campus_info.md",
+      "title": "플레이데이터 캠퍼스 정보",
+      "category": "플레이데이터 정보",
+      "source": "플레이데이터 캠퍼스 정보.pdf"
+    },
+    {
+      "path": "homepage_intro.md",
+      "title": "플레이데이터 홈페이지 소개",
+      "category": "플레이데이터 정보",
+      "source": "플레이데이터_홈페이지_소개.pdf"
+    }
+  ],
+  "categories": [
+    {
+      "id": "law",
+      "label": "법률",
+      "description": "개인정보 보호와 표시·광고 관련 기준을 안내합니다.",
+      "query": "법률 관련해서 어떤 내용을 물어보면 좋을까요?"
+    },
+    {
+      "id": "regulation",
+      "label": "운영규정",
+      "description": "국민내일배움카드와 직업훈련 운영 기준을 안내합니다.",
+      "query": "운영규정 관련해서 어떤 내용을 물어보면 좋을까요?"
+    },
+    {
+      "id": "course",
+      "label": "과정 상세",
+      "description": "과정별 목표, 커리큘럼, 프로젝트, 진로 차이를 안내합니다.",
+      "query": "과정 상세에서는 어떤 질문을 하면 좋을까요?"
+    },
+    {
+      "id": "playdata",
+      "label": "플레이데이터 정보",
+      "description": "기관 소개, 캠퍼스, 홈페이지 핵심 정보를 안내합니다.",
+      "query": "플레이데이터 정보에서는 어떤 질문을 하면 좋을까요?"
+    }
+  ]
+}

@@ -7,7 +7,11 @@ sqlalchemy
 cryptography
 python-multipart
 aiofiles
-pdfplumber
-pytesseract
-pypdfium2
+opendataloader-pdf
 chromadb
+langchain
+langchain-openai
+langchain-chroma
+langchain-text-splitters
+langchain-community
+ragas
