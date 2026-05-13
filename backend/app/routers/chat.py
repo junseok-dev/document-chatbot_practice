@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.models.chat import ChatRequest, ChatResponse, SuggestedQuestionsResponse
-from app.services.faq_service import search_faq, get_suggested_questions
+from app.services.faq_service import search_faq, get_suggested_questions, is_guide_query
 from app.services.document_service import search_documents
 from app.services.openai_service import get_ai_response
 from app.services.guardrail_service import check as guardrail_check
@@ -16,6 +16,49 @@ ERROR_FALLBACK = (
     "죄송합니다. 일시적인 오류가 발생했습니다. "
     "잠시 후 다시 시도하거나 담당자에게 문의해 주세요. "
     "📞 02-1234-5678 / ✉️ contact@codeai.kr (평일 09:00~18:00)"
+)
+
+
+def is_handoff_request(message: str) -> bool:
+    lowered = message.lower()
+
+    direct_handoff_signals = [
+        "상담원 연결",
+        "상담 연결",
+        "담당자 연결",
+        "매니저 연결",
+        "채널톡 연결",
+    ]
+    if any(signal in lowered for signal in direct_handoff_signals):
+        return True
+
+    interview_topics = ["오프라인 인터뷰", "인터뷰", "면접", "참여 링크", "링크"]
+    operational_actions = [
+        "일정 변경",
+        "변경",
+        "취소",
+        "예약",
+        "신청",
+        "재전송",
+        "다시 보내",
+        "못 받",
+        "못받",
+        "안 왔",
+        "안왔",
+        "연락",
+        "도와",
+        "부탁",
+    ]
+
+    return any(topic in lowered for topic in interview_topics) and any(
+        action in lowered for action in operational_actions
+    )
+
+
+HANDOFF_MESSAGE = (
+    "[상담원 연결] 상담 연결이 필요한 요청입니다. "
+    "성함, 연락처, 요청 내용을 남겨 주세요. "
+    "개인정보 수집·이용에 동의해 주시면 상담 연결을 도와드리겠습니다."
 )
 
 
@@ -43,8 +86,16 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         save_message(db, request.session_id, "assistant", blocked, source="guardrail")
         return ChatResponse(answer=blocked, source="guardrail", session_id=request.session_id)
 
-    # ── Step 1: FAQ 우선 검색 ────────────────────────────
-    faq_answer = search_faq(request.message)
+    if is_handoff_request(request.message):
+        save_message(db, request.session_id, "assistant", HANDOFF_MESSAGE, source="handoff")
+        return ChatResponse(
+            answer=HANDOFF_MESSAGE,
+            source="handoff",
+            session_id=request.session_id,
+        )
+
+    # ── Step 1: 가이드형 질문만 FAQ 우선 검색 ─────────────
+    faq_answer = search_faq(request.message) if is_guide_query(request.message) else None
     if faq_answer:
         save_message(db, request.session_id, "assistant", faq_answer, source="faq")
         return ChatResponse(
@@ -53,7 +104,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
             session_id=request.session_id,
         )
 
-    # ── Step 2: Markdown 문서 검색 (없으면 빈 문자열) ────
+    # ── Step 2: 하이브리드 문서 검색 ─────────────────────
     context = search_documents(request.message)
 
     # ── Step 3: OpenAI API 호출 ──────────────────────────

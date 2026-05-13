@@ -31,12 +31,14 @@ from app.services.rag_service import get_rag_service
 from app.services.faq_service import search_faq
 from app.services.openai_service import get_ai_response
 
-from openai import OpenAI as OpenAIClient
 from ragas import EvaluationDataset, evaluate
 from ragas.dataset_schema import SingleTurnSample
-from ragas.embeddings import OpenAIEmbeddings as RagasOpenAIEmbeddings
-from ragas.llms import llm_factory
-from ragas.metrics.collections import Faithfulness, AnswerRelevancy, ContextPrecision, ContextRecall
+from ragas.metrics._faithfulness import faithfulness as _faithfulness
+from ragas.metrics._answer_relevance import answer_relevancy as _answer_relevancy
+from ragas.metrics._context_precision import context_precision as _context_precision
+from ragas.metrics._context_recall import context_recall as _context_recall
+from langchain_openai import ChatOpenAI
+from langchain_openai import OpenAIEmbeddings as LCOpenAIEmbeddings
 
 
 def _split_contexts(context_str: str) -> list[str]:
@@ -54,22 +56,35 @@ def _check_hallucination(answer: str) -> bool:
 
 
 async def _collect_data(testset: list, rag) -> tuple[list, list, list]:
+    import os
+    os.system("")  # Windows ANSI 활성화
+    GREEN = "\033[92m"
+    RED   = "\033[91m"
+    RESET = "\033[0m"
+    COLS  = 13
+
     ragas_samples = []
     detail_results = []
     hallucination_results = []
+
+    print("수집 중 (초록=컨텍스트 있음  빨강=없음/거부):\n")
 
     for i, item in enumerate(testset, 1):
         q = item["question"]
         ground_truth = item["ground_truth"]
         q_type = item["type"]
 
-        print(f"[{i:02d}/{len(testset)}] {item['id']} - {q[:40]}...")
-
-        faq_answer = search_faq(q)
-        if faq_answer:
-            answer, contexts, source = faq_answer, [], "faq"
+        if q_type == "faq":
+            faq_answer = search_faq(q)
+            if faq_answer:
+                answer, contexts, source = faq_answer, [], "faq"
+            else:
+                context_str = rag.search(q, top_k=6)
+                contexts = _split_contexts(context_str)
+                answer = await get_ai_response(q, context_str)
+                source = "document" if context_str else "ai"
         else:
-            context_str = rag.search(q, top_k=4)
+            context_str = rag.search(q, top_k=6)
             contexts = _split_contexts(context_str)
             answer = await get_ai_response(q, context_str)
             source = "document" if context_str else "ai"
@@ -87,23 +102,42 @@ async def _collect_data(testset: list, rag) -> tuple[list, list, list]:
         })
 
         if q_type == "no_answer":
+            refused = _check_hallucination(answer)
             hallucination_results.append({
                 "id": item["id"],
                 "question": q,
                 "answer": answer,
-                "correctly_refused": _check_hallucination(answer),
+                "correctly_refused": refused,
             })
+            passed = refused
+        else:
+            passed = source in ("faq", "document") and bool(contexts or source == "faq")
+
+        dot = f"{GREEN}●{RESET}" if passed else f"{RED}●{RESET}"
+        # 행 시작에 레이블 출력
+        if (i - 1) % COLS == 0:
+            row_start = item["id"]
+            print(f"  {row_start}  ", end="", flush=True)
+        print(f"{dot} ", end="", flush=True)
+
+        # 행 끝 또는 마지막 질문
+        if i % COLS == 0 or i == len(testset):
+            print()
+
+        if q_type == "no_answer" or source == "faq":
+            continue
+
+        if not contexts:
             continue
 
         ragas_samples.append(
             SingleTurnSample(
                 user_input=q,
                 response=answer,
-                retrieved_contexts=contexts if contexts else ["(검색 결과 없음)"],
+                retrieved_contexts=contexts,
                 reference=ground_truth or "",
             )
         )
-        # ragas_samples 내 인덱스를 detail_results에 기록 (나중에 점수 매핑용)
         detail_results[-1]["_ragas_idx"] = len(ragas_samples) - 1
 
     return ragas_samples, detail_results, hallucination_results
@@ -153,21 +187,28 @@ def _print_dots(testset: list, detail_results: list, hallucination_results: list
 
 
 def _run_ragas(ragas_samples: list, settings) -> object:
-    openai_client = OpenAIClient(api_key=settings.openai_api_key)
-    eval_llm = llm_factory("gpt-4o-mini", client=openai_client)
-    eval_embeddings = RagasOpenAIEmbeddings(
-        client=openai_client,
+    eval_llm = ChatOpenAI(model="gpt-4o-mini", api_key=settings.openai_api_key, temperature=0)
+    eval_embeddings = LCOpenAIEmbeddings(
         model="text-embedding-3-small",
+        api_key=settings.openai_api_key,
     )
+    metrics = [_faithfulness, _answer_relevancy, _context_precision, _context_recall]
+    for m in metrics:
+        m.llm = None
+        if hasattr(m, "embeddings"):
+            m.embeddings = None
+
+    from ragas.run_config import RunConfig
+    run_cfg = RunConfig(max_retries=3, max_wait=60)
+
     dataset = EvaluationDataset(samples=ragas_samples)
     return evaluate(
         dataset,
-        metrics=[
-            Faithfulness(llm=eval_llm),
-            AnswerRelevancy(llm=eval_llm, embeddings=eval_embeddings),
-            ContextPrecision(llm=eval_llm),
-            ContextRecall(llm=eval_llm),
-        ],
+        metrics=metrics,
+        llm=eval_llm,
+        embeddings=eval_embeddings,
+        run_config=run_cfg,
+        batch_size=4,
     )
 
 
@@ -186,16 +227,21 @@ def main():
     )
 
     print(f"\nRAGAS 평가 실행 중 ({len(ragas_samples)}개)...")
-    result = _run_ragas(ragas_samples, settings)
-
-    scores = (
-        result.to_pandas()[
-            ["faithfulness", "answer_relevancy", "context_precision", "context_recall"]
-        ]
-        .mean()
-        .round(4)
-        .to_dict()
-    )
+    if not ragas_samples:
+        print("  [경고] RAGAS 평가 대상 샘플이 없습니다.")
+        scores = {"faithfulness": None, "answer_relevancy": None,
+                  "context_precision": None, "context_recall": None}
+        result = None
+    else:
+        result = _run_ragas(ragas_samples, settings)
+        scores = (
+            result.to_pandas()[
+                ["faithfulness", "answer_relevancy", "context_precision", "context_recall"]
+            ]
+            .mean()
+            .round(4)
+            .to_dict()
+        )
 
     hallucination_pass = sum(1 for r in hallucination_results if r["correctly_refused"])
     hallucination_total = len(hallucination_results)
@@ -223,22 +269,29 @@ def main():
     csv_path = output_dir / f"ragas_{ts}.csv"
 
     json_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
-    result.to_pandas().to_csv(csv_path, index=False, encoding="utf-8-sig")
-
-    ragas_df = result.to_pandas()
+    if result is not None:
+        result.to_pandas().to_csv(csv_path, index=False, encoding="utf-8-sig")
+        ragas_df = result.to_pandas()
+    else:
+        import pandas as pd
+        ragas_df = pd.DataFrame()
     _print_dots(testset, detail_results, hallucination_results, ragas_df)
+
+    def _fmt(v):
+        return f"{v:.3f}" if v is not None else "N/A"
 
     print("\n" + "=" * 40)
     print("  RAGAS 평가 결과")
     print("=" * 40)
-    print(f"  Faithfulness      : {scores['faithfulness']:.3f}")
-    print(f"  Answer Relevancy  : {scores['answer_relevancy']:.3f}")
-    print(f"  Context Precision : {scores['context_precision']:.3f}")
-    print(f"  Context Recall    : {scores['context_recall']:.3f}")
+    print(f"  Faithfulness      : {_fmt(scores['faithfulness'])}")
+    print(f"  Answer Relevancy  : {_fmt(scores['answer_relevancy'])}")
+    print(f"  Context Precision : {_fmt(scores['context_precision'])}")
+    print(f"  Context Recall    : {_fmt(scores['context_recall'])}")
     print(f"  Hallucination 방어 : {hallucination_pass}/{hallucination_total}")
     print("=" * 40)
     print(f"\n  JSON : {json_path}")
-    print(f"  CSV  : {csv_path}")
+    if result is not None:
+        print(f"  CSV  : {csv_path}")
 
 
 if __name__ == "__main__":

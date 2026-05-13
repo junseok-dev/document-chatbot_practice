@@ -10,7 +10,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
-    source: Literal["faq", "document", "ai", "fallback", "guardrail"]
+    source: Literal["faq", "document", "ai", "fallback", "guardrail", "handoff"]
     session_id: str
 
 
