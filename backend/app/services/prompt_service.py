@@ -29,6 +29,14 @@ def seed_prompt_configs(db: Session) -> None:
     db.commit()
 
 
+def update_counseling_prompt(db: Session) -> None:
+    settings = get_settings()
+    record = db.query(PromptConfig).filter(PromptConfig.prompt_key == "counseling_prompt").first()
+    if record:
+        record.content = settings.default_counseling_prompt
+        db.commit()
+
+
 def _get_prompt_value(db: Session, prompt_key: str) -> str:
     seed_prompt_configs(db)
     prompt = db.query(PromptConfig).filter(PromptConfig.prompt_key == prompt_key).first()

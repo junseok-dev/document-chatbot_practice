@@ -22,6 +22,23 @@ def _normalize_intent_text(message: str) -> str:
     return "".join((message or "").lower().split())
 
 
+GREETING_ANSWER = (
+    "안녕하세요! 플레이데이터 상담봇입니다. 반갑습니다.\n\n"
+    "저는 아래 4가지 카테고리에 대해 도움을 드릴 수 있어요.\n\n"
+    "- **법률**: 개인정보 처리방침, 이용약관, 법적 고지\n"
+    "- **운영규정**: 수강 조건, 출결, 환불·취소 정책\n"
+    "- **과정 상세**: 커리큘럼, 기간, 비용, 취업 지원\n"
+    "- **플레이데이터 정보**: 회사 소개, 오시는 길, 채용\n\n"
+    "궁금하신 내용을 편하게 질문해 주세요!"
+)
+
+
+def is_greeting(message: str) -> bool:
+    normalized = _normalize_intent_text(message)
+    signals = ["안녕", "하이", "헬로", "반가워", "반갑", "처음뵙", "안녕하세요", "안녕하십"]
+    return any(s in normalized for s in signals) and len(normalized) <= 20
+
+
 def is_handoff_request(message: str) -> bool:
     normalized = _normalize_intent_text(message)
     direct_handoff_signals = [
@@ -111,6 +128,9 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         answer = get_prompt_value("handoff_prompt")
         source = "handoff"
         processing_status = "handoff"
+    elif is_greeting(request.message):
+        answer = GREETING_ANSWER
+        source = "faq"
     else:
         if is_guide_query(request.message):
             faq_answer = search_faq(request.message)

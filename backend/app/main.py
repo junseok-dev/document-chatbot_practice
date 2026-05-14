@@ -10,7 +10,7 @@ from app.db import models
 from app.db.database import SessionLocal, engine
 from app.routers import admin, chat
 from app.services.faq_service import seed_faqs
-from app.services.prompt_service import seed_prompt_configs
+from app.services.prompt_service import seed_prompt_configs, update_counseling_prompt
 from app.services.rag_service import get_rag_service
 from app.services.storage_service import ensure_storage_dirs
 
@@ -24,6 +24,7 @@ async def lifespan(app: FastAPI):
     try:
         seed_faqs(db)
         seed_prompt_configs(db)
+        update_counseling_prompt(db)
         get_rag_service().index_all(db)
     finally:
         db.close()

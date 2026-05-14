@@ -11,19 +11,7 @@ STANDARD_REFUSAL = "참고 문서에서 확인되지 않습니다. 정확한 안
 
 def _normalize_response(answer: str) -> str:
     text = (answer or "").strip()
-    if not text:
-        return STANDARD_REFUSAL
-
-    refusal_signals = [
-        "참고 문서에서 확인되지 않습니다",
-        "문서에서 확인되지 않습니다",
-        "확인되지 않습니다",
-        "정보가 없습니다",
-        "문서가 없습니다",
-    ]
-    if any(signal in text for signal in refusal_signals):
-        return STANDARD_REFUSAL
-    return text
+    return text if text else STANDARD_REFUSAL
 
 
 async def get_ai_response(question: str, context: str) -> tuple[str, float]:
