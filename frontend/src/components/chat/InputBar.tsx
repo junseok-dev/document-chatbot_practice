@@ -63,7 +63,7 @@ const InputBar: React.FC<Props> = ({ onSendMessage, isLoading }) => {
       </div>
       <div className="text-center mt-2">
         <span className="text-[11px] text-gray-400 font-medium">
-          CodeAI 챗봇은 실수가 있을 수 있습니다. 중요한 정보는 담당자에게 재확인 바랍니다.
+          Playdata Chatbot은 실수가 있을 수 있습니다. 중요한 정보는 담당자에게 재확인 바랍니다.
         </span>
       </div>
     </div>

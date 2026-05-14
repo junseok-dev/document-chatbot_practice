@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="CodeAI 교육 상담 챗봇 API",
+    title="Playdata Chatbot API",
     description="FAQ와 문서 기반 교육 상담 API",
     version="2.0.0",
     lifespan=lifespan,

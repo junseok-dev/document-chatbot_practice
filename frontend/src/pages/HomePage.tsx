@@ -13,7 +13,7 @@ const HomePage: React.FC = () => {
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               <span className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-brand-600 to-blue-600">
-                CodeAI
+                Playdata Chatbot
               </span>
             </div>
             <div className="flex items-center space-x-4">

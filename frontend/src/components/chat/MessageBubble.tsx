@@ -30,7 +30,7 @@ const MessageBubble: React.FC<Props> = ({ message }) => {
         </div>
 
         <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
-          {!isUser && <span className="mb-1 ml-1 text-xs font-medium text-gray-500">CodeAI 상담봇</span>}
+          {!isUser && <span className="mb-1 ml-1 text-xs font-medium text-gray-500">Playdata Chatbot</span>}
 
           <div
             className={`relative rounded-2xl px-5 py-3.5 text-[15px] leading-relaxed shadow-sm ${

@@ -27,7 +27,7 @@ const ChatPage: React.FC = () => {
                 AI
               </div>
               <div>
-                <h1 className="text-lg font-bold text-gray-900 leading-tight">CodeAI 입과 상담</h1>
+                <h1 className="text-lg font-bold text-gray-900 leading-tight">Playdata Chatbot</h1>
                 <p className="text-xs text-brand-600 font-medium">실시간 AI 상담원 대기중</p>
               </div>
             </div>
