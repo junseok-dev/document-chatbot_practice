@@ -8,9 +8,11 @@ interface Props {
 }
 
 const THINKING_STATUSES = [
-  '질문의 핵심을 보고 있어요.',
-  '관련된 안내를 찾고 있어요.',
-  '쉽게 말할 답변을 정리하고 있어요.',
+  '질문을 확인하고 있어요.',
+  '핵심 의도를 파악하고 있어요.',
+  '관련 안내를 찾아보고 있어요.',
+  '필요한 내용만 고르고 있어요.',
+  '쉽게 말할 답변으로 정리하고 있어요.',
 ];
 
 const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
@@ -33,7 +35,7 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
 
     const timer = window.setInterval(() => {
       setStatusIndex((current) => (current + 1) % THINKING_STATUSES.length);
-    }, 1400);
+    }, 3000);
 
     return () => window.clearInterval(timer);
   }, [isStreaming]);
