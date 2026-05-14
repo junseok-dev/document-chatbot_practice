@@ -1,7 +1,7 @@
 import re
 
 MAX_BUBBLES = 3
-MAX_BUBBLE_CHARS = 56
+MAX_BUBBLE_CHARS = 64
 
 _SENTENCE_END = re.compile(r"(?<=[.!?\u3002\uff01\uff1f])\s+")
 _SOFT_BREAK_MARKERS = (
