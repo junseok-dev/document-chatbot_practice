@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Search } from 'lucide-react';
 import ChatWindow from '../components/chat/ChatWindow';
@@ -8,21 +8,14 @@ import { Conversation } from '../types';
 
 const ChatPage: React.FC = () => {
   const navigate = useNavigate();
-  const { loadConversation } = useChat();
+  const { messages, isLoading, suggestedQuestions, sendMessage, loadConversation, convId } = useChat();
   const [historyOpen, setHistoryOpen] = useState(false);
-
-  const currentConvId = (() => {
-    try { return sessionStorage.getItem('chatCurrentConvId') ?? undefined; } catch { return undefined; }
-  })();
-
-  const handleSelect = (conv: Conversation) => {
-    loadConversation(conv);
-  };
+  const historyBtnRef = useRef<HTMLButtonElement>(null);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-gray-50">
       <header className="relative z-10 shrink-0 border-b border-gray-200 bg-white shadow-sm">
-        <div className="relative mx-auto flex h-16 w-full max-w-4xl items-center justify-between px-4">
+        <div className="mx-auto flex h-16 w-full max-w-4xl items-center justify-between px-4">
           <div className="flex items-center gap-4">
             <button
               onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}
@@ -42,35 +35,39 @@ const ChatPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="relative">
-            <button
-              onClick={() => setHistoryOpen((v) => !v)}
-              className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm transition-colors ${
-                historyOpen
-                  ? 'border-brand-400 bg-brand-50 text-brand-700'
-                  : 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-              }`}
-            >
-              <Search size={15} />
-              <span className="hidden sm:inline text-[13px]">키워드로 대화 찾기</span>
-            </button>
-
-            <HistoryDropdown
-              open={historyOpen}
-              onClose={() => setHistoryOpen(false)}
-              onSelect={handleSelect}
-              currentConvId={currentConvId}
-            />
-          </div>
+          <button
+            ref={historyBtnRef}
+            onClick={() => setHistoryOpen((v) => !v)}
+            className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm transition-colors ${
+              historyOpen
+                ? 'border-brand-400 bg-brand-50 text-brand-700'
+                : 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+            }`}
+          >
+            <Search size={15} />
+            <span className="hidden sm:inline text-[13px]">키워드로 대화 찾기</span>
+          </button>
         </div>
       </header>
 
-      <main className="relative flex-1 overflow-hidden bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-fixed">
-        <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px]"></div>
+      <main className="relative flex-1 overflow-hidden">
         <div className="relative z-10 mx-auto h-full max-w-4xl border-x border-gray-100 bg-white shadow-2xl">
-          <ChatWindow />
+          <ChatWindow
+            messages={messages}
+            isLoading={isLoading}
+            suggestedQuestions={suggestedQuestions}
+            sendMessage={sendMessage}
+          />
         </div>
       </main>
+
+      <HistoryDropdown
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        onSelect={(conv: Conversation) => loadConversation(conv)}
+        currentConvId={convId}
+        anchorRef={historyBtnRef}
+      />
     </div>
   );
 };

@@ -8,6 +8,7 @@ interface Props {
   onClose: () => void;
   onSelect: (conv: Conversation) => void;
   currentConvId?: string;
+  anchorRef: React.RefObject<HTMLButtonElement | null>;
 }
 
 const highlight = (text: string, keyword: string) => {
@@ -45,7 +46,7 @@ const formatDate = (iso: string) => {
   return d.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
 };
 
-const HistoryDropdown: React.FC<Props> = ({ open, onClose, onSelect, currentConvId }) => {
+const HistoryDropdown: React.FC<Props> = ({ open, onClose, onSelect, currentConvId, anchorRef }) => {
   const [keyword, setKeyword] = useState('');
   const { search, refresh } = useConversations();
   const [results, setResults] = useState<Conversation[]>([]);
@@ -65,20 +66,25 @@ const HistoryDropdown: React.FC<Props> = ({ open, onClose, onSelect, currentConv
     setResults(search(keyword));
   }, [keyword]);
 
+  // outside-click: 패널과 토글 버튼 둘 다 제외
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) onClose();
+      const target = e.target as Node;
+      if (panelRef.current?.contains(target)) return;
+      if (anchorRef.current?.contains(target)) return;
+      onClose();
     };
     if (open) document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [open, onClose]);
+  }, [open, onClose, anchorRef]);
 
   if (!open) return null;
 
   return (
     <div
       ref={panelRef}
-      className="absolute right-4 top-full mt-2 z-50 w-80 rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden"
+      className="fixed right-4 z-50 w-80 rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden"
+      style={{ top: (anchorRef.current?.getBoundingClientRect().bottom ?? 64) + 8 }}
     >
       {/* Search input */}
       <div className="px-3 pt-3 pb-2">

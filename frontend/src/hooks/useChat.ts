@@ -146,6 +146,7 @@ export const useChat = () => {
     sendMessage,
     startNewChat,
     loadConversation,
+    convId,
   };
 };
 
