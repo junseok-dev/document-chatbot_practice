@@ -1,3 +1,11 @@
+export interface Conversation {
+  id: string;
+  title: string;
+  messages: Message[];
+  startedAt: string;
+  sessionId: string;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';

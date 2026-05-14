@@ -1,11 +1,11 @@
-from pydantic import BaseModel
 from typing import Literal, Optional
+
+from pydantic import BaseModel
 
 
 class ChatRequest(BaseModel):
     session_id: str
     message: str
-    user_name: Optional[str] = None  # 입력 시 암호화하여 DB 저장
 
 
 class ChatResponse(BaseModel):

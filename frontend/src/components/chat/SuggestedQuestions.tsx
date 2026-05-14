@@ -7,7 +7,7 @@ interface Props {
   disabled: boolean;
 }
 
-const ACTION_IDS = new Set(['sq_005', 'sq_006']);
+const ACTION_IDS = new Set<string>();
 
 const SuggestedQuestions: React.FC<Props> = ({ questions, onSelect, disabled }) => {
   if (!questions.length) return null;

@@ -36,36 +36,36 @@ const InputBar: React.FC<Props> = ({ onSendMessage, isLoading }) => {
   }, [input]);
 
   return (
-    <div className="bg-white border-t border-gray-100 p-4 shrink-0">
-      <div className="max-w-4xl mx-auto flex items-end gap-3 bg-gray-50 p-2 rounded-2xl border border-gray-200 focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500 transition-all shadow-sm">
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="궁금한 점을 자유롭게 물어보세요... (Shift+Enter로 줄바꿈)"
-          disabled={isLoading}
-          className="flex-1 max-h-[120px] min-h-[24px] bg-transparent border-none resize-none px-3 py-2 text-[15px] focus:outline-none focus:ring-0 disabled:opacity-50 placeholder-gray-400"
-          rows={1}
-        />
+    <div className="shrink-0 border-t border-gray-200 bg-white px-3 py-2.5">
+      <div className="flex items-end gap-2">
+        <div className="flex-1 flex items-end gap-2 rounded-3xl border border-gray-200 bg-gray-50 px-4 py-2 focus-within:border-brand-400 focus-within:ring-1 focus-within:ring-brand-400 transition-all">
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="메시지를 입력하세요"
+            disabled={isLoading}
+            className="flex-1 max-h-[100px] min-h-[22px] resize-none bg-transparent border-none text-[14px] leading-relaxed focus:outline-none focus:ring-0 disabled:opacity-50 placeholder-gray-400"
+            rows={1}
+          />
+        </div>
         <button
           onClick={handleSubmit}
           disabled={!input.trim() || isLoading}
-          className="shrink-0 bg-brand-600 text-white p-3 rounded-xl hover:bg-brand-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed shadow-sm h-11 w-11 flex items-center justify-center group"
+          className="shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-brand-500 text-white shadow-sm transition-colors hover:bg-brand-600 disabled:bg-gray-200 disabled:cursor-not-allowed"
           aria-label="메시지 전송"
         >
           {isLoading ? (
-            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
           ) : (
-            <Send size={18} className="transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+            <Send size={16} />
           )}
         </button>
       </div>
-      <div className="text-center mt-2">
-        <span className="text-[11px] text-gray-400 font-medium">
-          엔코아AI캠퍼스 상담 챗봇은 실수가 있을 수 있습니다. 중요한 정보는 담당자에게 재확인 바랍니다.
-        </span>
-      </div>
+      <p className="mt-1.5 text-center text-[10px] text-gray-400">
+        엔코아AI캠퍼스 상담 챗봇은 실수가 있을 수 있습니다. 중요한 정보는 담당자에게 재확인 바랍니다.
+      </p>
     </div>
   );
 };
