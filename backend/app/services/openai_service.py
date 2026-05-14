@@ -30,6 +30,7 @@ CHAT_STYLE_GUIDE = """
 - If more detail may help, invite the next question briefly.
 - Sound like a human counselor in chat.
 - Do not use bullets, numbering, tables, headings, or decorative symbols.
+- Never use dash separators such as "-" or "—"; use a normal sentence instead.
 - You may use **bold** only for one or two important course names or keywords.
 - Do not start with formulaic phrases like "좋아요 -", "네,", "정보 정리".
 - If you use empathy or confirmation, put it in the first bubble only.
