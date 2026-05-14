@@ -7,45 +7,33 @@ interface Props {
   disabled: boolean;
 }
 
-const ACTION_IDS = new Set<string>();
-
 const SuggestedQuestions: React.FC<Props> = ({ questions, onSelect, disabled }) => {
   if (!questions.length) return null;
 
+  const btnClass =
+    'w-full bg-white border border-brand-200 text-brand-700 px-2 py-1.5 rounded-full text-[12px] font-medium hover:bg-brand-50 hover:border-brand-300 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed text-center truncate';
+
+  const urlBtnClass =
+    'w-full bg-amber-500 border border-amber-500 text-white px-2 py-1.5 rounded-full text-[12px] font-medium hover:bg-amber-600 transition-all shadow-sm text-center truncate';
+
   return (
-    <div className="flex flex-wrap gap-2 mb-6">
-      {questions.map((q) => {
-        const isAction = ACTION_IDS.has(q.id);
-
-        if (q.url) {
-          return (
-            <a
-              key={q.id}
-              href={q.url}
-              target="_blank"
-              rel="noreferrer"
-              className="bg-amber-500 border border-amber-500 text-white px-3.5 py-1.5 rounded-full text-[13px] font-medium hover:bg-amber-600 hover:border-amber-600 transition-all shadow-sm whitespace-nowrap"
-            >
-              {q.label}
-            </a>
-          );
-        }
-
-        return (
+    <div className="grid grid-cols-4 gap-1.5">
+      {questions.map((q) =>
+        q.url ? (
+          <a key={q.id} href={q.url} target="_blank" rel="noreferrer" className={urlBtnClass}>
+            {q.label}
+          </a>
+        ) : (
           <button
             key={q.id}
             onClick={() => onSelect(q.query)}
             disabled={disabled}
-            className={
-              isAction
-                ? 'bg-amber-500 border border-amber-500 text-white px-3.5 py-1.5 rounded-full text-[13px] font-medium hover:bg-amber-600 hover:border-amber-600 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap'
-                : 'bg-white border border-brand-200 text-brand-700 px-3.5 py-1.5 rounded-full text-[13px] font-medium hover:bg-brand-50 hover:border-brand-300 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap'
-            }
+            className={btnClass}
           >
             {q.label}
           </button>
-        );
-      })}
+        ),
+      )}
     </div>
   );
 };
