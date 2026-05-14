@@ -9,7 +9,7 @@ from app.db.database import get_db
 from app.db.models import CancelRequest, ChatLog
 from app.models.chat import ChatRequest, ChatResponse, SuggestedQuestionsResponse
 from app.services.document_service import search_documents
-from app.services.faq_service import get_suggested_questions, is_guide_query, search_faq
+from app.services.faq_service import get_suggested_questions, is_guide_query, match_button_faq, search_faq
 from app.services.guardrail_service import check as guardrail_check
 from app.services.openai_service import get_ai_response
 from app.services.prompt_service import get_prompt_value
@@ -128,6 +128,9 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         processing_status = "handoff"
     elif is_greeting(request.message):
         answer = GREETING_ANSWER
+        source = "faq"
+    elif btn := match_button_faq(request.message):
+        answer = btn
         source = "faq"
     else:
         if is_guide_query(request.message):

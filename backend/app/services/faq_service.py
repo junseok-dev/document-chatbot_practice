@@ -226,5 +226,16 @@ def search_faq(query: str) -> str | None:
     return faq.get("answer")
 
 
+def match_button_faq(query: str) -> str | None:
+    """버튼 클릭처럼 쿼리가 FAQ 질문과 정확히 일치할 때 direct_answer 반환."""
+    matched = match_faq(query)
+    if not matched:
+        return None
+    score, faq = matched
+    if faq.get("direct_answer") and score >= 10.0:
+        return faq.get("answer")
+    return None
+
+
 def get_suggested_questions() -> list[dict]:
     return _load_faq_json().get("suggested_questions", [])
