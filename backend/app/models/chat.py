@@ -3,9 +3,15 @@ from typing import Literal, Optional
 from pydantic import BaseModel
 
 
+class HistoryMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
 class ChatRequest(BaseModel):
     session_id: str
     message: str
+    history: list[HistoryMessage] = []
 
 
 class ChatResponse(BaseModel):

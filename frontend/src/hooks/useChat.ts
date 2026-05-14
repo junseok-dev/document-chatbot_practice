@@ -107,9 +107,16 @@ export const useChat = () => {
       setIsLoading(true);
       setStreamingMessageId(botId);
 
+      // 최근 10개 메시지를 대화 이력으로 구성 (웰컴/빈 메시지 제외, 현재 질문 제외)
+      const history = messages
+        .filter((m) => m.id !== 'welcome' && m.content.trim())
+        .slice(-10)
+        .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+
       await chatApi.streamMessage(
         sessionIdRef.current,
         content,
+        history,
         (token) => {
           setMessages((prev) =>
             prev.map((m) => (m.id === botId ? { ...m, content: m.content + token } : m)),

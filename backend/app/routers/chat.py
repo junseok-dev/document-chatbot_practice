@@ -153,8 +153,9 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         else:
             result = search_documents(request.message)
             retrieval_chunks = result.chunks
+            history = [{"role": h.role, "content": h.content} for h in request.history]
             try:
-                answer, llm_cost = await get_ai_response(request.message, result.context)
+                answer, llm_cost = await get_ai_response(request.message, result.context, history)
                 source = "document" if result.context else "ai"
             except Exception as exc:
                 answer = get_prompt_value("fallback_prompt")
@@ -258,8 +259,9 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
             else:
                 result = search_documents(request.message)
                 retrieval_chunks = result.chunks
+                history = [{"role": h.role, "content": h.content} for h in request.history]
                 try:
-                    async for token in get_ai_response_stream(request.message, result.context):
+                    async for token in get_ai_response_stream(request.message, result.context, history):
                         full_answer += token
                         yield _sse({"token": token})
                     source = "document" if result.context else "ai"

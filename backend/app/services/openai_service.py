@@ -16,19 +16,26 @@ def _normalize_response(answer: str) -> str:
     return text if text else STANDARD_REFUSAL
 
 
-async def get_ai_response(question: str, context: str) -> tuple[str, float]:
+def _build_messages(system_prompt: str, user_message: str, history: list[dict]) -> list[dict]:
+    """system + 이전 대화 이력 + 현재 질문으로 메시지 배열 구성."""
+    msgs: list[dict] = [{"role": "system", "content": system_prompt}]
+    for h in history:
+        msgs.append({"role": h["role"], "content": h["content"]})
+    msgs.append({"role": "user", "content": user_message})
+    return msgs
+
+
+async def get_ai_response(question: str, context: str, history: list[dict] | None = None) -> tuple[str, float]:
     if client is None:
         return STANDARD_REFUSAL, 0.0
 
     system_prompt = get_prompt_value("counseling_prompt")
     user_message = f"[참고 문서]\n{context}\n\n[질문]\n{question}" if context else f"[질문]\n{question}"
+    messages = _build_messages(system_prompt, user_message, history or [])
 
     response = await client.chat.completions.create(
         model=settings.model_name,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ],
+        messages=messages,
         max_completion_tokens=4096,
     )
 
@@ -39,7 +46,7 @@ async def get_ai_response(question: str, context: str) -> tuple[str, float]:
     return _normalize_response(content), estimated_cost
 
 
-async def get_ai_response_stream(question: str, context: str) -> AsyncGenerator[str, None]:
+async def get_ai_response_stream(question: str, context: str, history: list[dict] | None = None) -> AsyncGenerator[str, None]:
     """OpenAI 스트리밍 API를 사용해 텍스트 토큰을 순차적으로 yield."""
     if client is None:
         yield STANDARD_REFUSAL
@@ -47,13 +54,11 @@ async def get_ai_response_stream(question: str, context: str) -> AsyncGenerator[
 
     system_prompt = get_prompt_value("counseling_prompt")
     user_message = f"[참고 문서]\n{context}\n\n[질문]\n{question}" if context else f"[질문]\n{question}"
+    messages = _build_messages(system_prompt, user_message, history or [])
 
     stream = await client.chat.completions.create(
         model=settings.model_name,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ],
+        messages=messages,
         max_completion_tokens=4096,
         stream=True,
     )

@@ -30,6 +30,7 @@ export const chatApi = {
   streamMessage: async (
     sessionId: string,
     message: string,
+    history: { role: 'user' | 'assistant'; content: string }[],
     onToken: (token: string) => void,
     onDone: (source: string, handoffUrl: string | null) => void,
     onError: () => void,
@@ -38,7 +39,7 @@ export const chatApi = {
       const response = await fetch(`${API_BASE_URL}/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, message }),
+        body: JSON.stringify({ session_id: sessionId, message, history }),
       });
 
       if (!response.ok || !response.body) {
