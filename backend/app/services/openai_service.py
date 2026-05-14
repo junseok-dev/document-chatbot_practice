@@ -8,7 +8,7 @@ from app.services.response_formatter import format_chat_response
 
 settings = get_settings()
 client = AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
-MAX_COMPLETION_TOKENS = 500
+MAX_COMPLETION_TOKENS = 4096
 
 CHAT_STYLE_GUIDE = """
 [Counselor chat style]
