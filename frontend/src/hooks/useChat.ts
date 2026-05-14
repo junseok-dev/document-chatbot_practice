@@ -4,8 +4,8 @@ import { chatApi } from '../services/api';
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
 
-const CONVERSATIONS_KEY = 'chatConversations';
-const CURRENT_CONV_KEY = 'chatCurrentConvId';
+const CONVERSATIONS_KEY = 'chatConversations:v2';
+const CURRENT_CONV_KEY = 'chatCurrentConvId:v2';
 const QUESTION_DEBOUNCE_MS = 1000;
 
 const WELCOME_MESSAGE: Message = {
