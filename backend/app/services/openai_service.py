@@ -8,23 +8,24 @@ from app.services.response_formatter import format_chat_response
 
 settings = get_settings()
 client = AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
+MAX_COMPLETION_TOKENS = 500
 
 CHAT_STYLE_GUIDE = """
-[상담 채팅 말투 규칙]
-- 먼저 사용자의 질문 의도를 한 문장으로 파악한다.
-- 참고 문서 전체를 요약하지 않는다.
-- 질문의 핵심 맥락에 맞는 내용만 고른다.
-- 고른 내용을 상담사가 말하듯 자연스럽게 정리한다.
-- 사용자가 묻지 않은 세부 정보는 먼저 말하지 않는다.
-- 문서를 읽어주지 말고 실제 상담사처럼 대답한다.
-- 답변은 최대 5~6줄까지만 작성한다.
-- 한 줄은 반드시 15글자 이내로 쓴다.
-- 한 줄 안에서 문장이 끝나게 한다.
-- 끝나지 않으면 '~고', '~이고', '~며'처럼 자연스럽게 끊는다.
-- 핵심 결론을 먼저 말한다.
-- 자세한 내용은 사용자가 다시 물으면 이어서 답한다.
-- 긴 목록, 긴 문단, 출처 설명, 문서 요약식 표현은 피한다.
-- "문서에 따르면", "참고 문서상" 같은 표현은 쓰지 않는다.
+[Counselor chat style]
+- Answer in Korean.
+- Understand the user's intent first.
+- Do not summarize the whole document.
+- Select only details directly related to the question.
+- Sound like a human counselor in chat.
+- Put one complete thought in each chat bubble.
+- Separate chat bubbles with one blank line.
+- Use 2 to 6 short chat bubbles.
+- Do not split words or sentences awkwardly.
+- Prefer complete sentences in each bubble.
+- Start with the core answer.
+- Leave extra details for follow-up questions.
+- Avoid long lists, headings, source labels, and document-summary tone.
+- Do not say "according to the document" or "reference document".
 """
 
 STANDARD_REFUSAL = "참고 문서에서 확인되지 않습니다. 정확한 안내는 관리자 확인이 필요합니다."
@@ -63,7 +64,7 @@ async def get_ai_response(question: str, context: str, history: list[dict] | Non
     response = await client.chat.completions.create(
         model=settings.model_name,
         messages=messages,
-        max_completion_tokens=4096,
+        max_completion_tokens=MAX_COMPLETION_TOKENS,
     )
 
     content = response.choices[0].message.content or ""
@@ -94,15 +95,26 @@ async def get_ai_response_stream(question: str, context: str, history: list[dict
     stream = await client.chat.completions.create(
         model=settings.model_name,
         messages=messages,
-        max_completion_tokens=4096,
+        max_completion_tokens=MAX_COMPLETION_TOKENS,
         stream=True,
     )
 
     full_answer = ""
+    emitted = ""
     async for chunk in stream:
         if chunk.choices and chunk.choices[0].delta.content:
             full_answer += chunk.choices[0].delta.content
+            formatted = format_chat_response(full_answer)
+            if formatted and formatted.startswith(emitted):
+                delta = formatted[len(emitted):]
+                if delta:
+                    emitted = formatted
+                    yield delta
 
-    formatted = format_chat_response(full_answer)
-    for index, line in enumerate(formatted.splitlines()):
-        yield line if index == 0 else f"\n{line}"
+    formatted = format_chat_response(full_answer) or format_chat_response(STANDARD_REFUSAL)
+    if not emitted:
+        yield formatted
+    elif formatted.startswith(emitted):
+        delta = formatted[len(emitted):]
+        if delta:
+            yield delta

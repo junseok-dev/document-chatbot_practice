@@ -1,23 +1,20 @@
 import re
 
-MAX_LINE_CHARS = 15
-MAX_LINES = 6
+MAX_BUBBLES = 6
+MAX_BUBBLE_CHARS = 80
 
-_STYLE_BREAKS = (
+_SENTENCE_END = re.compile(r"(?<=[.!?\u3002\uff01\uff1f])\s+")
+_SOFT_BREAK_MARKERS = (
     "\uc774\uace0",
-    "\uace0",
     "\uc774\uba70",
-    "\uba70",
+    "\uc778\ub370",
     "\uc9c0\ub9cc",
     "\ub77c\uc11c",
     "\ud574\uc11c",
     "\ub2c8\uae4c",
-    "\uc778\ub370",
-    "\uc73c\ub2c8",
-    "\uba74",
+    "\uace0",
+    "\uba70",
 )
-
-_SENTENCE_BREAKS = re.compile(r"(?<=[.!?\u3002\uff01\uff1f])\s+")
 
 
 def _clean_text(text: str) -> str:
@@ -26,52 +23,82 @@ def _clean_text(text: str) -> str:
     return cleaned.strip()
 
 
-def _find_breakpoint(text: str) -> int:
-    limit = min(len(text), MAX_LINE_CHARS)
-    window = text[:limit]
-
-    for mark in ("\u3002", ".", "!", "?", ":", ";", ",", "\uff0c"):
-        idx = window.rfind(mark)
-        if idx >= 3:
-            return idx + 1
-
-    for marker in _STYLE_BREAKS:
-        idx = window.rfind(marker)
-        if idx >= 3:
-            return idx + len(marker)
-
-    idx = window.rfind(" ")
-    if idx >= 3:
-        return idx
-
-    return limit
+def _split_sentences(text: str) -> list[str]:
+    sentences = [part.strip() for part in _SENTENCE_END.split(text) if part.strip()]
+    return sentences or [text]
 
 
-def _split_to_short_lines(text: str) -> list[str]:
-    lines: list[str] = []
-    for sentence in _SENTENCE_BREAKS.split(text):
-        remaining = sentence.strip()
-        while remaining:
-            if len(remaining) <= MAX_LINE_CHARS:
-                lines.append(remaining)
+def _split_long_sentence(sentence: str) -> list[str]:
+    if len(sentence) <= MAX_BUBBLE_CHARS:
+        return [sentence]
+
+    parts: list[str] = []
+    remaining = sentence.strip()
+    while len(remaining) > MAX_BUBBLE_CHARS:
+        window = remaining[:MAX_BUBBLE_CHARS]
+        break_at = -1
+
+        for marker in _SOFT_BREAK_MARKERS:
+            idx = window.rfind(marker)
+            if idx >= 20:
+                break_at = idx + len(marker)
                 break
 
-            break_at = _find_breakpoint(remaining)
-            line = remaining[:break_at].strip(" ,")
-            if line:
-                lines.append(line)
-            remaining = remaining[break_at:].strip(" ,")
+        if break_at < 0:
+            for mark in (",", "\uff0c", ":", ";", " "):
+                idx = window.rfind(mark)
+                if idx >= 20:
+                    break_at = idx + 1
+                    break
 
-            if len(lines) >= MAX_LINES:
-                return lines
+        if break_at < 0:
+            break_at = MAX_BUBBLE_CHARS
 
-    return lines
+        parts.append(remaining[:break_at].strip(" ,"))
+        remaining = remaining[break_at:].strip(" ,")
+
+    if remaining:
+        parts.append(remaining)
+    return parts
 
 
-def format_chat_response(text: str, max_lines: int = MAX_LINES) -> str:
+def _pack_bubbles(parts: list[str], max_bubbles: int) -> list[str]:
+    bubbles: list[str] = []
+    current = ""
+    current_count = 0
+
+    for part in parts:
+        if current and current_count == 1 and len(current) <= 12 and current.endswith(("!", "\uff01")):
+            bubbles.append(current)
+            current = ""
+            current_count = 0
+
+        candidate = f"{current} {part}".strip() if current else part
+        if current and (len(candidate) > MAX_BUBBLE_CHARS or current_count >= 2):
+            bubbles.append(current)
+            current = part
+            current_count = 1
+        else:
+            current = candidate
+            current_count += 1
+
+        if len(bubbles) >= max_bubbles:
+            break
+
+    if current and len(bubbles) < max_bubbles:
+        bubbles.append(current)
+
+    return bubbles[:max_bubbles]
+
+
+def format_chat_response(text: str, max_bubbles: int = MAX_BUBBLES) -> str:
     cleaned = _clean_text(text)
     if not cleaned:
         return ""
 
-    lines = _split_to_short_lines(cleaned)
-    return "\n".join(lines[:max_lines])
+    parts: list[str] = []
+    for sentence in _split_sentences(cleaned):
+        parts.extend(_split_long_sentence(sentence))
+
+    bubbles = _pack_bubbles(parts, max_bubbles)
+    return "\n\n".join(bubbles)
