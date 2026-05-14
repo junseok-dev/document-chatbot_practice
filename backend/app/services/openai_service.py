@@ -27,7 +27,7 @@ async def get_ai_response(question: str, context: str) -> tuple[str, float]:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
         ],
-        max_completion_tokens=320,
+        max_completion_tokens=4096,
     )
 
     content = response.choices[0].message.content or ""
