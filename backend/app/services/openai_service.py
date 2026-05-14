@@ -40,7 +40,6 @@ async def get_ai_response(question: str, context: str) -> tuple[str, float]:
             {"role": "user", "content": user_message},
         ],
         max_completion_tokens=320,
-        temperature=0.1,
     )
 
     content = response.choices[0].message.content or ""
