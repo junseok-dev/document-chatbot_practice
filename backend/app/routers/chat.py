@@ -13,7 +13,6 @@ from app.services.faq_service import get_suggested_questions, is_guide_query, se
 from app.services.guardrail_service import check as guardrail_check
 from app.services.openai_service import get_ai_response
 from app.services.prompt_service import get_prompt_value
-from app.utils.crypto import encrypt
 
 router = APIRouter()
 
@@ -103,8 +102,7 @@ def is_cancel_request(message: str) -> bool:
 
 @router.post("", response_model=ChatResponse)
 async def chat(request: ChatRequest, db: Session = Depends(get_db)):
-    encrypted_name = encrypt(request.user_name) if request.user_name else None
-    get_or_create_session(db, request.session_id, encrypted_name)
+    get_or_create_session(db, request.session_id, None)
     save_message(db, request.session_id, "user", request.message, source="user")
 
     retrieval_chunks: list[str] = []
