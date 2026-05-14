@@ -64,6 +64,9 @@ def build_retrieval_plan(query: str) -> RetrievalPlan:
     if any(token in lowered for token in ["개인정보", "광고", "허위", "과장", "보관 기간", "파기"]):
         return RetrievalPlan(strategy="keyword", top_k=5, files=LAW_FILES)
 
+    if any(token in lowered for token in ["프로그램", "커리큘럼", "수업", "교육 과정"]):
+        return RetrievalPlan(strategy="mmr", top_k=8, files=_merge_files(COURSE_FILES, PLAYDATA_FILES))
+
     if any(token in lowered for token in ["비전공자", "어떤 사람", "추천", "취업", "직무", "과정"]):
         return RetrievalPlan(strategy="hybrid", top_k=6, files=_merge_files(COURSE_FILES, PLAYDATA_FILES))
 
