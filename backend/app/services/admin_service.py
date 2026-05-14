@@ -59,6 +59,177 @@ def create_processing_log(
     db.commit()
 
 
+async def _process_md_content(
+    db: Session,
+    filename: str,
+    md_content: str,
+    title: str,
+    category: str,
+    reindex: bool = True,
+) -> DocumentRecord:
+    logical_name = _slugify(Path(filename).stem)
+    version = _next_version(db, logical_name)
+
+    managed_md_path = MANAGED_DOCS_DIR / f"{logical_name}_v{version}.md"
+    managed_md_path.write_text(md_content, encoding="utf-8")
+
+    record = DocumentRecord(
+        logical_name=logical_name,
+        version=version,
+        original_filename=filename,
+        storage_key=None,
+        md_path=str(managed_md_path),
+        parser_type="markdown",
+        status="embedding",
+        is_active=False,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    create_processing_log(db, "document", "uploaded", f"{filename} MD 업로드 완료", document_id=record.id)
+
+    try:
+        rag = get_rag_service()
+        chunks = rag.build_chunks_for_markdown(
+            md_content,
+            {
+                "file": logical_name,
+                "title": title,
+                "category": category,
+                "document_id": record.id,
+                "source_type": "document",
+            },
+        )
+        rag.replace_document_chunks(db, record.id, chunks)
+
+        json_path = MANAGED_JSON_DIR / f"{logical_name}_v{version}.json"
+        json_path.write_text(
+            json.dumps(
+                {
+                    "document_id": record.id,
+                    "logical_name": logical_name,
+                    "version": version,
+                    "original_filename": filename,
+                    "title": title,
+                    "category": category,
+                    "status": "ready",
+                    "chunk_count": len(chunks),
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+        chunk_path = MANAGED_CHUNKS_DIR / f"{logical_name}_v{version}.json"
+        chunk_path.write_text(
+            json.dumps(
+                [
+                    {"index": i, "content": chunk.page_content, "metadata": chunk.metadata}
+                    for i, chunk in enumerate(chunks)
+                ],
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+        embedding_path = MANAGED_EMBEDDINGS_DIR / f"{logical_name}_v{version}.json"
+        embedding_path.write_text(
+            json.dumps(
+                {
+                    "document_id": record.id,
+                    "embedding_model": get_settings().embedding_model,
+                    "strategy": "full_rebuild",
+                    "chunk_count": len(chunks),
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+        record.json_path = str(json_path)
+        record.chunk_path = str(chunk_path)
+        record.embedding_path = str(embedding_path)
+
+        old_records = (
+            db.query(DocumentRecord)
+            .filter(
+                DocumentRecord.logical_name == logical_name,
+                DocumentRecord.id != record.id,
+                DocumentRecord.is_active.is_(True),
+            )
+            .all()
+        )
+        for old in old_records:
+            delete_document_assets(db, old)
+
+        record.is_active = True
+        record.status = "ready"
+        record.error_message = None
+        db.commit()
+        if reindex:
+            rag.index_all(db)
+        create_processing_log(db, "document", "ready", "문서 활성화 완료", document_id=record.id)
+        db.refresh(record)
+        return record
+    except Exception as exc:
+        record.status = "failed"
+        record.error_message = str(exc)
+        db.commit()
+        create_processing_log(db, "document", "failed", "문서 처리 실패", document_id=record.id, detail=str(exc))
+        raise
+
+
+async def process_uploaded_md(
+    db: Session,
+    filename: str,
+    content: bytes,
+    title: str | None = None,
+    category: str | None = None,
+) -> DocumentRecord:
+    md_content = content.decode("utf-8")
+    return await _process_md_content(
+        db,
+        filename=filename,
+        md_content=md_content,
+        title=title or Path(filename).stem,
+        category=category or "document",
+        reindex=True,
+    )
+
+
+async def process_catalog_import(
+    db: Session,
+    catalog: dict,
+    md_files: dict[str, bytes],
+) -> list[DocumentRecord]:
+    records = []
+    entries = catalog.get("documents", [])
+    for entry in entries:
+        path = entry.get("path", "")
+        filename = Path(path).name
+        if filename not in md_files:
+            continue
+        title = entry.get("title") or Path(filename).stem
+        category = entry.get("category") or "document"
+        try:
+            record = await _process_md_content(
+                db,
+                filename=filename,
+                md_content=md_files[filename].decode("utf-8"),
+                title=title,
+                category=category,
+                reindex=False,
+            )
+            records.append(record)
+        except Exception as exc:
+            create_processing_log(db, "document", "failed", f"{filename} 처리 실패: {exc}")
+    get_rag_service().index_all(db)
+    return records
+
+
 async def process_uploaded_pdf(db: Session, filename: str, content: bytes) -> DocumentRecord:
     ensure_storage_dirs()
     logical_name = _slugify(filename)

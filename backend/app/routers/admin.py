@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -10,7 +10,14 @@ from app.db.crud import get_all_sessions, get_session_messages
 from app.db.database import get_db
 from app.db.models import ChatLog, ChatSession, DocumentRecord, FaqRecord, ProcessingLog, PromptConfig
 from app.models.session import MessageDetail, SessionDetail, SessionSummary
-from app.services.admin_service import full_reindex, hard_delete_document, process_uploaded_pdf, upsert_faqs
+from app.services.admin_service import (
+    full_reindex,
+    hard_delete_document,
+    process_catalog_import,
+    process_uploaded_md,
+    process_uploaded_pdf,
+    upsert_faqs,
+)
 from app.services.faq_service import seed_faqs
 from app.services.prompt_service import seed_prompt_configs
 from app.utils.crypto import decrypt
@@ -73,6 +80,56 @@ def get_session_detail(session_id: str, db: Session = Depends(get_db), _: None =
         detail.content = decrypt(message.content) if message.content else ""
         decrypted_messages.append(detail)
     return SessionDetail(session=summary, messages=decrypted_messages)
+
+
+@router.post("/upload-md")
+async def upload_md(
+    file: UploadFile = File(...),
+    title: str = Form(None),
+    category: str = Form(None),
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_admin),
+):
+    if not file.filename or not file.filename.lower().endswith(".md"):
+        raise HTTPException(status_code=400, detail="MD 파일만 업로드할 수 있습니다.")
+    try:
+        record = await process_uploaded_md(db, file.filename, await file.read(), title=title, category=category)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {
+        "message": "MD 업로드와 색인이 완료되었습니다.",
+        "document_id": record.id,
+        "logical_name": record.logical_name,
+        "status": record.status,
+    }
+
+
+@router.post("/import-catalog")
+async def import_catalog(
+    catalog: UploadFile = File(...),
+    files: list[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_admin),
+):
+    if not catalog.filename or not catalog.filename.lower().endswith(".json"):
+        raise HTTPException(status_code=400, detail="catalog는 JSON 파일이어야 합니다.")
+    try:
+        catalog_data = json.loads(await catalog.read())
+        md_files = {
+            f.filename: await f.read()
+            for f in files
+            if f.filename and f.filename.lower().endswith(".md")
+        }
+        records = await process_catalog_import(db, catalog_data, md_files)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {
+        "message": f"{len(records)}개 문서를 가져왔습니다.",
+        "documents": [
+            {"id": r.id, "logical_name": r.logical_name, "status": r.status}
+            for r in records
+        ],
+    }
 
 
 @router.post("/upload-pdf")
