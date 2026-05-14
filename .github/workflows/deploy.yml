@@ -35,3 +35,4 @@ jobs:
           ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+          CHANNEL_TALK_URL: ${{ secrets.CHANNEL_TALK_URL }}

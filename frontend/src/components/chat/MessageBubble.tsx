@@ -53,7 +53,7 @@ const MessageBubble: React.FC<Props> = ({ message }) => {
               </div>
             )}
 
-            {!isUser && (message.source === 'fallback' || message.source === 'handoff') && (
+            {!isUser && message.source === 'handoff' && (
               <div className="mt-3">
                 {message.handoff_url ? (
                   <a
