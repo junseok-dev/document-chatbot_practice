@@ -37,6 +37,19 @@ def is_greeting(message: str) -> bool:
     return any(s in normalized for s in signals) and len(normalized) <= 20
 
 
+def is_training_cost_query(message: str) -> bool:
+    normalized = _normalize_intent_text(message)
+    cost_signals = ["훈련비", "교육비", "수강료", "본인부담금", "비용", "얼마", "돈"]
+    return any(signal in normalized for signal in cost_signals)
+
+
+TRAINING_COST_ANSWER = (
+    "훈련비는 본인부담금 0원으로 안내돼요.\n\n"
+    "K-디지털 트레이닝 과정이라 교육비 부담 없이 참여하는 구조입니다.\n\n"
+    "훈련장려금은 출석과 조건에 따라 달라질 수 있어요."
+)
+
+
 def is_handoff_request(message: str) -> bool:
     normalized = _normalize_intent_text(message)
     direct_handoff_signals = [
@@ -127,6 +140,9 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         processing_status = "handoff"
     elif is_greeting(request.message):
         answer = GREETING_ANSWER
+        source = "faq"
+    elif is_training_cost_query(request.message):
+        answer = TRAINING_COST_ANSWER
         source = "faq"
     elif btn := match_button_faq(request.message):
         answer = btn
@@ -238,6 +254,10 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
         elif is_greeting(request.message):
             source = "faq"
             async for chunk in _stream_static(GREETING_ANSWER):
+                yield chunk
+        elif is_training_cost_query(request.message):
+            source = "faq"
+            async for chunk in _stream_static(TRAINING_COST_ANSWER):
                 yield chunk
         elif btn := match_button_faq(request.message):
             source = "faq"

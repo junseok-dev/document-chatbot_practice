@@ -8,7 +8,16 @@ import { Conversation } from '../types';
 
 const ChatPage: React.FC = () => {
   const navigate = useNavigate();
-  const { messages, isLoading, streamingMessageId, suggestedQuestions, sendMessage, loadConversation, convId } = useChat();
+  const {
+    messages,
+    isLoading,
+    streamingMessageId,
+    suggestedQuestions,
+    sendMessage,
+    stopGenerating,
+    loadConversation,
+    convId,
+  } = useChat();
   const [historyOpen, setHistoryOpen] = useState(false);
   const historyBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -58,6 +67,7 @@ const ChatPage: React.FC = () => {
             streamingMessageId={streamingMessageId}
             suggestedQuestions={suggestedQuestions}
             sendMessage={sendMessage}
+            stopGenerating={stopGenerating}
           />
         </div>
       </main>

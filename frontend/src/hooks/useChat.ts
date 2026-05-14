@@ -66,6 +66,8 @@ export const useChat = () => {
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [suggestedQuestions, setSuggestedQuestions] = useState<SuggestedQuestion[]>([]);
   const sessionIdRef = useRef(newSessionId());
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const activeBotIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     sessionStorage.setItem(CURRENT_CONV_KEY, convId);
@@ -84,9 +86,24 @@ export const useChat = () => {
       .catch((err) => console.error('Failed to load suggested questions:', err));
   }, []);
 
+  const stopGenerating = useCallback(() => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setIsLoading(false);
+    setStreamingMessageId(null);
+    if (activeBotIdRef.current) {
+      const activeId = activeBotIdRef.current;
+      setMessages((prev) => prev.filter((m) => m.id !== activeId));
+      activeBotIdRef.current = null;
+    }
+  }, []);
+
   const sendMessage = useCallback(
     async (content: string) => {
-      if (!content.trim() || isLoading) return;
+      if (!content.trim()) return;
+      if (isLoading) {
+        stopGenerating();
+      }
 
       const userMessage: Message = {
         id: generateId(),
@@ -106,10 +123,13 @@ export const useChat = () => {
       setMessages((prev) => [...prev, userMessage, botPlaceholder]);
       setIsLoading(true);
       setStreamingMessageId(botId);
+      activeBotIdRef.current = botId;
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
 
       // 최근 10개 메시지를 대화 이력으로 구성 (웰컴/빈 메시지 제외, 현재 질문 제외)
       const history = messages
-        .filter((m) => m.id !== 'welcome' && m.content.trim())
+        .filter((m) => m.id !== 'welcome' && m.id !== streamingMessageId && m.content.trim())
         .slice(-10)
         .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
@@ -132,6 +152,8 @@ export const useChat = () => {
           );
           setIsLoading(false);
           setStreamingMessageId(null);
+          abortControllerRef.current = null;
+          activeBotIdRef.current = null;
         },
         () => {
           setMessages((prev) =>
@@ -147,10 +169,13 @@ export const useChat = () => {
           );
           setIsLoading(false);
           setStreamingMessageId(null);
+          abortControllerRef.current = null;
+          activeBotIdRef.current = null;
         },
+        controller.signal,
       );
     },
-    [isLoading],
+    [isLoading, stopGenerating, messages, streamingMessageId],
   );
 
   const startNewChat = useCallback(() => {
@@ -172,6 +197,7 @@ export const useChat = () => {
     streamingMessageId,
     suggestedQuestions,
     sendMessage,
+    stopGenerating,
     startNewChat,
     loadConversation,
     convId,

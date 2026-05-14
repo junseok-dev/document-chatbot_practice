@@ -10,9 +10,17 @@ interface Props {
   streamingMessageId: string | null;
   suggestedQuestions: SuggestedQuestion[];
   sendMessage: (content: string) => void;
+  stopGenerating: () => void;
 }
 
-const ChatWindow: React.FC<Props> = ({ messages, isLoading, streamingMessageId, suggestedQuestions, sendMessage }) => {
+const ChatWindow: React.FC<Props> = ({
+  messages,
+  isLoading,
+  streamingMessageId,
+  suggestedQuestions,
+  sendMessage,
+  stopGenerating,
+}) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -67,7 +75,7 @@ const ChatWindow: React.FC<Props> = ({ messages, isLoading, streamingMessageId, 
         </div>
       )}
 
-      <InputBar onSendMessage={sendMessage} isLoading={isLoading} />
+      <InputBar onSendMessage={sendMessage} onStop={stopGenerating} isLoading={isLoading} />
     </div>
   );
 };
