@@ -1,7 +1,7 @@
 import re
 
 MAX_BUBBLES = 3
-MAX_BUBBLE_CHARS = 64
+MAX_BUBBLE_CHARS = 72
 
 _SENTENCE_END = re.compile(r"(?<=[.!?\u3002\uff01\uff1f])\s+")
 _SOFT_BREAK_MARKERS = (
@@ -17,13 +17,13 @@ _SOFT_BREAK_MARKERS = (
 )
 
 
-def _clean_text(text: str) -> str:
+def _clean_paragraph(text: str) -> str:
     cleaned = re.sub(r"[`>#]+", " ", text or "")
-    cleaned = re.sub(r"(^|\s)[\-•]\s+", " ", cleaned)
+    cleaned = re.sub(r"(^|\s)[\-\u2022]\s+", " ", cleaned)
     cleaned = re.sub(r"\s*[\u2013\u2014]\s*", ". ", cleaned)
     cleaned = re.sub(r"\s+-\s+", ". ", cleaned)
     cleaned = re.sub(r"\s*(STEP|Step|step)\s*\d+\.?\s*", " ", cleaned)
-    cleaned = re.sub(r"\s*\d+\s*(개월|시간)\s*", " ", cleaned)
+    cleaned = re.sub(r"\s*\d+\s*(\uac1c\uc6d4|\uc2dc\uac04)\s*", " ", cleaned)
     cleaned = re.sub(r"\([^)]{8,}\)", " ", cleaned)
     cleaned = re.sub(
         r"^\s*(\uc88b\uc544\uc694|\ub124|\uc54c\uaca0\uc2b5\ub2c8\ub2e4|\ud655\uc778\ud588\uc2b5\ub2c8\ub2e4)\s*[-\u2013\u2014:]\s*",
@@ -35,13 +35,13 @@ def _clean_text(text: str) -> str:
         "",
         cleaned,
     )
-    cleaned = re.sub(r"\s+", " ", cleaned)
+    cleaned = re.sub(r"[ \t]+", " ", cleaned)
     return cleaned.strip()
 
 
 def _split_sentences(text: str) -> list[str]:
     sentences = [part.strip() for part in _SENTENCE_END.split(text) if part.strip()]
-    return sentences or [text]
+    return sentences or ([text] if text else [])
 
 
 def _split_long_sentence(sentence: str) -> list[str]:
@@ -108,13 +108,18 @@ def _pack_bubbles(parts: list[str], max_bubbles: int) -> list[str]:
 
 
 def format_chat_response(text: str, max_bubbles: int = MAX_BUBBLES) -> str:
-    cleaned = _clean_text(text)
-    if not cleaned:
+    paragraphs = [
+        _clean_paragraph(part)
+        for part in re.split(r"\n{2,}", text or "")
+        if _clean_paragraph(part)
+    ]
+    if not paragraphs:
         return ""
 
     parts: list[str] = []
-    for sentence in _split_sentences(cleaned):
-        parts.extend(_split_long_sentence(sentence))
+    for paragraph in paragraphs:
+        for sentence in _split_sentences(paragraph):
+            parts.extend(_split_long_sentence(sentence))
 
     bubbles = _pack_bubbles(parts, max_bubbles)
     return "\n\n".join(bubbles)
