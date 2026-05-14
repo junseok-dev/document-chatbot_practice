@@ -19,11 +19,23 @@ export default function AdminPage() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [mdFile, setMdFile] = useState<File | null>(null);
+  const [mdTitle, setMdTitle] = useState('');
+  const [mdCategory, setMdCategory] = useState('');
+  const [mdStatus, setMdStatus] = useState('');
+  const [mdUploading, setMdUploading] = useState(false);
+  const [catalogFile, setCatalogFile] = useState<File | null>(null);
+  const [catalogMdFiles, setCatalogMdFiles] = useState<File[]>([]);
+  const [catalogStatus, setCatalogStatus] = useState('');
+  const [catalogImporting, setCatalogImporting] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [pwStatus, setPwStatus] = useState('');
   const [faqStatus, setFaqStatus] = useState('');
   const [promptStatus, setPromptStatus] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mdFileInputRef = useRef<HTMLInputElement>(null);
+  const catalogFileInputRef = useRef<HTMLInputElement>(null);
+  const catalogMdInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -67,6 +79,44 @@ export default function AdminPage() {
       setError('비밀번호가 올바르지 않습니다.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const uploadMd = async () => {
+    if (!mdFile) return;
+    setMdUploading(true);
+    setMdStatus('업로드 및 처리 중입니다...');
+    try {
+      const result = await adminApi.uploadMd(password, mdFile, mdTitle || undefined, mdCategory || undefined);
+      setMdStatus(result.message);
+      setMdFile(null);
+      setMdTitle('');
+      setMdCategory('');
+      if (mdFileInputRef.current) mdFileInputRef.current.value = '';
+      await loadDashboard(password);
+    } catch {
+      setMdStatus('업로드에 실패했습니다.');
+    } finally {
+      setMdUploading(false);
+    }
+  };
+
+  const importCatalog = async () => {
+    if (!catalogFile || catalogMdFiles.length === 0) return;
+    setCatalogImporting(true);
+    setCatalogStatus('카탈로그 임포트 중입니다...');
+    try {
+      const result = await adminApi.importCatalog(password, catalogFile, catalogMdFiles);
+      setCatalogStatus(result.message);
+      setCatalogFile(null);
+      setCatalogMdFiles([]);
+      if (catalogFileInputRef.current) catalogFileInputRef.current.value = '';
+      if (catalogMdInputRef.current) catalogMdInputRef.current.value = '';
+      await loadDashboard(password);
+    } catch {
+      setCatalogStatus('임포트에 실패했습니다.');
+    } finally {
+      setCatalogImporting(false);
     }
   };
 
@@ -232,6 +282,82 @@ export default function AdminPage() {
                 비밀번호 변경
               </button>
               {pwStatus && <p className="text-sm text-gray-600">{pwStatus}</p>}
+            </div>
+          </section>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <section className="rounded-xl bg-white p-6 shadow">
+            <h2 className="mb-4 text-lg font-bold text-gray-800">MD 파일 업로드</h2>
+            <div className="space-y-3">
+              <input
+                ref={mdFileInputRef}
+                type="file"
+                accept=".md"
+                onChange={e => setMdFile(e.target.files?.[0] ?? null)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="문서 제목 (선택)"
+                value={mdTitle}
+                onChange={e => setMdTitle(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="카테고리 (선택, 예: 법령, 운영규정)"
+                value={mdCategory}
+                onChange={e => setMdCategory(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+              <button
+                onClick={uploadMd}
+                disabled={!mdFile || mdUploading}
+                className="w-full rounded-lg bg-brand-600 px-5 py-2 font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+              >
+                {mdUploading ? '처리 중...' : 'MD 업로드'}
+              </button>
+              {mdStatus && <p className="text-sm text-gray-600">{mdStatus}</p>}
+            </div>
+          </section>
+
+          <section className="rounded-xl bg-white p-6 shadow">
+            <h2 className="mb-4 text-lg font-bold text-gray-800">Catalog 일괄 임포트</h2>
+            <p className="mb-3 text-xs text-gray-500">catalog.json + MD 파일들을 한번에 업로드합니다.</p>
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">catalog.json</label>
+                <input
+                  ref={catalogFileInputRef}
+                  type="file"
+                  accept=".json"
+                  onChange={e => setCatalogFile(e.target.files?.[0] ?? null)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">MD 파일들 (복수 선택 가능)</label>
+                <input
+                  ref={catalogMdInputRef}
+                  type="file"
+                  accept=".md"
+                  multiple
+                  onChange={e => setCatalogMdFiles(Array.from(e.target.files ?? []))}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+                {catalogMdFiles.length > 0 && (
+                  <p className="mt-1 text-xs text-gray-500">{catalogMdFiles.length}개 파일 선택됨</p>
+                )}
+              </div>
+              <button
+                onClick={importCatalog}
+                disabled={!catalogFile || catalogMdFiles.length === 0 || catalogImporting}
+                className="w-full rounded-lg bg-teal-600 px-5 py-2 font-medium text-white hover:bg-teal-700 disabled:opacity-50"
+              >
+                {catalogImporting ? '임포트 중...' : '일괄 임포트'}
+              </button>
+              {catalogStatus && <p className="text-sm text-gray-600">{catalogStatus}</p>}
             </div>
           </section>
         </div>

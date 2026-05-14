@@ -58,6 +58,36 @@ export const adminApi = {
     return response.data;
   },
 
+  uploadMd: async (
+    password: string,
+    file: File,
+    title?: string,
+    category?: string,
+  ): Promise<{ message: string; document_id: number; logical_name: string; status: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (title) formData.append('title', title);
+    if (category) formData.append('category', category);
+    const response = await axios.post(`${API_BASE_URL}/admin/upload-md`, formData, {
+      headers: { 'x-admin-password': password },
+    });
+    return response.data;
+  },
+
+  importCatalog: async (
+    password: string,
+    catalogFile: File,
+    mdFiles: File[],
+  ): Promise<{ message: string; documents: { id: number; logical_name: string; status: string }[] }> => {
+    const formData = new FormData();
+    formData.append('catalog', catalogFile);
+    mdFiles.forEach(f => formData.append('files', f));
+    const response = await axios.post(`${API_BASE_URL}/admin/import-catalog`, formData, {
+      headers: { 'x-admin-password': password },
+    });
+    return response.data;
+  },
+
   getDocuments: async (password: string): Promise<{ documents: AdminDocument[] }> => {
     const response = await apiClient.get('/admin/documents', {
       headers: { 'x-admin-password': password },
