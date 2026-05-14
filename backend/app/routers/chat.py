@@ -213,7 +213,7 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
             for bubble_index, bubble in enumerate(bubbles):
                 if bubble_index > 0:
                     yield _sse({"token": "\n\n"})
-                    await asyncio.sleep(2.0)
+                    await asyncio.sleep(1.0)
                 for char in bubble:
                     yield _sse({"token": char})
                     await asyncio.sleep(0.015)

@@ -40,7 +40,7 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
       <div className="flex flex-col max-w-[72%]">
         <span className="mb-1 text-[12px] font-semibold text-gray-600">엔코아AI캠퍼스</span>
         <div className="flex items-end gap-1.5">
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col items-start gap-1.5">
             {isStreaming ? (
               <div className="rounded-2xl rounded-tl-sm bg-white px-4 py-3 text-[14px] leading-relaxed text-gray-800 shadow-sm border border-gray-100">
                 <div className="flex gap-1 py-0.5">
@@ -53,7 +53,7 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
               assistantBubbles.map((bubble, index) => (
                 <div
                   key={index}
-                  className={`rounded-2xl bg-white px-4 py-2.5 text-[14px] leading-relaxed text-gray-800 shadow-sm border border-gray-100 ${
+                  className={`w-fit max-w-full rounded-2xl bg-white px-4 py-2.5 text-[14px] leading-relaxed text-gray-800 shadow-sm border border-gray-100 ${
                     index === 0 ? 'rounded-tl-sm' : ''
                   }`}
                 >

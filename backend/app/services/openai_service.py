@@ -11,7 +11,7 @@ from app.services.response_formatter import format_chat_response
 settings = get_settings()
 client = AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
 MAX_COMPLETION_TOKENS = 4096
-BUBBLE_PAUSE_SECONDS = 2.0
+BUBBLE_PAUSE_SECONDS = 1.0
 MAX_STREAM_BUBBLES = 3
 TYPE_DELAY_SECONDS = 0.015
 _SENTENCE_END = re.compile(r"(.+?[.!?\u3002\uff01\uff1f])(\s+|$)")
