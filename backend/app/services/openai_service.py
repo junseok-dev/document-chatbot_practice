@@ -23,7 +23,8 @@ CHAT_STYLE_GUIDE = """
 - Do not summarize the whole document.
 - Select only details directly related to the question.
 - Sound like a human counselor in chat.
-- Do not use symbols like "-", "—", ":", bullets, numbering, or markdown.
+- Do not use bullets, numbering, tables, headings, or decorative symbols.
+- You may use **bold** only for one or two important course names or keywords.
 - Do not start with formulaic phrases like "좋아요 -", "네,", "정보 정리".
 - If you use empathy or confirmation, put it in the first bubble only.
 - The first bubble must be a complete short sentence, not a label or fragment.
@@ -38,6 +39,11 @@ CHAT_STYLE_GUIDE = """
 - Avoid long lists, headings, source labels, and document-summary tone.
 - Do not mention duration, hours, exact step names, or tool stacks unless the user asks.
 - For course explanations, explain who it fits and what it is for, not the curriculum list.
+- Rewrite the retrieved document in your own easy words.
+- Assume the user is deciding whether the course fits them.
+- Use everyday words before technical terms.
+- If a technical term is necessary, explain it briefly in the same sentence.
+- Do not copy document phrases such as "service-level workflow", "technology stack", or "learning flow".
 - Do not say "I'll summarize everything" or "I'll organize all information".
 - Do not say "according to the document" or "reference document".
 

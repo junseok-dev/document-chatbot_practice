@@ -1,4 +1,5 @@
 import React from 'react';
+import ReactMarkdown from 'react-markdown';
 import { Message } from '../../types';
 
 interface Props {
@@ -56,7 +57,16 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
                     index === 0 ? 'rounded-tl-sm' : ''
                   }`}
                 >
-                  <div className="whitespace-pre-wrap break-keep">{bubble}</div>
+                  <div className="whitespace-pre-wrap break-keep">
+                    <ReactMarkdown
+                      components={{
+                        p: ({ children }) => <span>{children}</span>,
+                        strong: ({ children }) => <strong className="font-semibold text-gray-950">{children}</strong>,
+                      }}
+                    >
+                      {bubble}
+                    </ReactMarkdown>
+                  </div>
                 </div>
               ))
             )}

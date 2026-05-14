@@ -18,7 +18,8 @@ _SOFT_BREAK_MARKERS = (
 
 
 def _clean_text(text: str) -> str:
-    cleaned = re.sub(r"[*_`>#-]+", " ", text or "")
+    cleaned = re.sub(r"[`>#]+", " ", text or "")
+    cleaned = re.sub(r"(^|\s)[\-•]\s+", " ", cleaned)
     cleaned = re.sub(r"\s*(STEP|Step|step)\s*\d+\.?\s*", " ", cleaned)
     cleaned = re.sub(r"\s*\d+\s*(개월|시간)\s*", " ", cleaned)
     cleaned = re.sub(r"\([^)]{8,}\)", " ", cleaned)
