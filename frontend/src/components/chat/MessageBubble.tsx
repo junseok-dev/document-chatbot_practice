@@ -1,5 +1,4 @@
 import React from 'react';
-import ReactMarkdown from 'react-markdown';
 import { Message } from '../../types';
 
 interface Props {
@@ -45,9 +44,9 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
                 <div className="w-1.5 h-1.5 bg-brand-400 rounded-full animate-bounce" />
               </div>
             ) : (
-            <div className="prose prose-sm prose-brand max-w-none prose-p:my-0.5 prose-a:text-brand-600 prose-a:no-underline hover:prose-a:underline prose-ul:my-1 prose-li:my-0.5">
-              <ReactMarkdown>{message.content}</ReactMarkdown>
-            </div>
+              <div className="whitespace-pre-wrap break-keep text-[14px] leading-6">
+                {message.content}
+              </div>
             )}
 
             {message.source && !['fallback', 'handoff', 'guardrail'].includes(message.source) && (
