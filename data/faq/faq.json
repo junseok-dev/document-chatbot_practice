@@ -334,6 +334,18 @@
       "id": "sq_004",
       "label": "플레이데이터 정보",
       "query": "플레이데이터 정보 쪽에서는 뭘 물어보면 돼?"
+    },
+    {
+      "id": "sq_005",
+      "label": "취소요청",
+      "query": "",
+      "url": "https://playdata.channel.io/user-chats/6a05316e937fba919bc6?page=https%3A%2F%2Fplaydata.channel.io%2Fworkflows%2F30803"
+    },
+    {
+      "id": "sq_006",
+      "label": "문의하기",
+      "query": "",
+      "url": "https://playdata.channel.io/user-chats/6a05316e937fba919bc6?page=https%3A%2F%2Fplaydata.channel.io%2Fworkflows%2F30803"
     }
   ],
   "categories": [

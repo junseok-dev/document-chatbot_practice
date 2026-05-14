@@ -19,6 +19,7 @@ class SuggestedQuestion(BaseModel):
     id: str
     label: str
     query: str
+    url: Optional[str] = None
 
 
 class SuggestedQuestionsResponse(BaseModel):

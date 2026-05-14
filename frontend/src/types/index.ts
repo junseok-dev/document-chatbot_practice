@@ -33,6 +33,7 @@ export interface SuggestedQuestion {
   id: string;
   label: string;
   query: string;
+  url?: string;
 }
 
 export interface ChatResponse {
