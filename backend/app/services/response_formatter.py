@@ -8,9 +8,9 @@ _SENTENCE_SPLIT = re.compile(r"(?<=[.!?。！？])\s+")
 def _clean_text(text: str) -> str:
     cleaned = (text or "").replace("\r\n", "\n").replace("\r", "\n")
     cleaned = cleaned.replace("```", "")
-    cleaned = re.sub(r"(?m)^\s{0,3}#{1,6}\s*", "", cleaned)
-    cleaned = re.sub(r"(?m)^\s{0,3}>\s*", "", cleaned)
-    cleaned = re.sub(r"(?m)^\s*[-*•]\s+", "", cleaned)
+    cleaned = re.sub(r"(?m)^[ \t]{0,3}#{1,6}[ \t]*", "", cleaned)
+    cleaned = re.sub(r"(?m)^[ \t]{0,3}>[ \t]*", "", cleaned)
+    cleaned = re.sub(r"(?m)^[ \t]*[-*•][ \t]+", "• ", cleaned)
     cleaned = re.sub(r"\s*[\u2013\u2014]\s*", ". ", cleaned)
     cleaned = re.sub(r"\s+-\s+", ". ", cleaned)
     cleaned = re.sub(r"[ \t]+", " ", cleaned)
@@ -41,6 +41,8 @@ def format_chat_response(text: str, max_bubbles: int = MAX_BUBBLES) -> str:
     bubbles: list[str] = []
     if len(paragraphs) > 1:
         bubbles = paragraphs[:max_bubbles]
+    elif "\n" in paragraphs[0]:
+        bubbles = [paragraphs[0]]
     else:
         bubbles = _split_paragraph(paragraphs[0])[:max_bubbles]
 
