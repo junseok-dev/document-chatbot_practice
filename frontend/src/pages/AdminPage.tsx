@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { adminApi } from '../services/api';
+import { adminApi, clearAdminPassword, getAdminPassword, saveAdminPassword } from '../services/api';
 import { AdminDocument, AdminFaq, AdminSession, ChatLog, ProcessingLog, PromptConfig } from '../types';
 
 const formatJson = (value: unknown) => JSON.stringify(value, null, 2);
 
 export default function AdminPage() {
+  const [authenticated, setAuthenticated] = useState(() => !!getAdminPassword());
+  const [passwordInput, setPasswordInput] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+
   const [sessions, setSessions] = useState<AdminSession[]>([]);
   const [documents, setDocuments] = useState<AdminDocument[]>([]);
   const [prompts, setPrompts] = useState<PromptConfig[]>([]);
@@ -55,8 +60,54 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
-    loadDashboard();
-  }, []);
+    if (authenticated) loadDashboard();
+  }, [authenticated]);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passwordInput.trim()) return;
+    setLoginLoading(true);
+    setLoginError('');
+    saveAdminPassword(passwordInput.trim());
+    try {
+      await adminApi.getSessions();
+      setAuthenticated(true);
+    } catch {
+      clearAdminPassword();
+      setLoginError('비밀번호가 올바르지 않습니다.');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  if (!authenticated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <form
+          onSubmit={handleLogin}
+          className="w-full max-w-sm rounded-xl bg-white p-8 shadow space-y-4"
+        >
+          <h1 className="text-xl font-bold text-gray-900 text-center">관리자 로그인</h1>
+          <input
+            type="password"
+            placeholder="관리자 비밀번호"
+            value={passwordInput}
+            onChange={(e) => setPasswordInput(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            autoFocus
+          />
+          {loginError && <p className="text-sm text-red-600">{loginError}</p>}
+          <button
+            type="submit"
+            disabled={loginLoading || !passwordInput.trim()}
+            className="w-full rounded-lg bg-brand-600 px-4 py-2 font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+          >
+            {loginLoading ? '확인 중...' : '로그인'}
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   const uploadMd = async () => {
     if (!mdFile) return;
@@ -163,14 +214,22 @@ export default function AdminPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">관리자 화면</h1>
-            <p className="text-sm text-gray-500">로그인 없이 문서, FAQ, 프롬프트와 처리 로그를 관리합니다.</p>
+            <p className="text-sm text-gray-500">문서, FAQ, 프롬프트와 처리 로그를 관리합니다.</p>
           </div>
-          <button
-            onClick={reindexAll}
-            className="rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-900"
-          >
-            전체 재색인
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={reindexAll}
+              className="rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-900"
+            >
+              전체 재색인
+            </button>
+            <button
+              onClick={() => { clearAdminPassword(); setAuthenticated(false); }}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            >
+              로그아웃
+            </button>
+          </div>
         </div>
 
         {loadError && (

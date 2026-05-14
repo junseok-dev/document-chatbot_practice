@@ -18,6 +18,18 @@ const apiClient = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+const ADMIN_PWD_KEY = 'adminPassword';
+export const getAdminPassword = (): string => sessionStorage.getItem(ADMIN_PWD_KEY) ?? '';
+export const saveAdminPassword = (password: string) => sessionStorage.setItem(ADMIN_PWD_KEY, password);
+export const clearAdminPassword = () => sessionStorage.removeItem(ADMIN_PWD_KEY);
+
+const adminApiClient = axios.create({ baseURL: API_BASE_URL });
+adminApiClient.interceptors.request.use((config) => {
+  const pwd = getAdminPassword();
+  if (pwd) config.headers['X-Admin-Password'] = pwd;
+  return config;
+});
+
 export const chatApi = {
   sendMessage: async (sessionId: string, message: string): Promise<ChatResponse> => {
     const response = await apiClient.post<ChatResponse>('/chat', {
@@ -84,19 +96,19 @@ export const chatApi = {
 
 export const adminApi = {
   getSessions: async (): Promise<AdminSession[]> => {
-    const response = await apiClient.get<AdminSession[]>('/admin/sessions');
+    const response = await adminApiClient.get<AdminSession[]>('/admin/sessions');
     return response.data;
   },
 
   getSessionDetail: async (sessionId: string): Promise<AdminSessionDetail> => {
-    const response = await apiClient.get<AdminSessionDetail>(`/admin/sessions/${sessionId}`);
+    const response = await adminApiClient.get<AdminSessionDetail>(`/admin/sessions/${sessionId}`);
     return response.data;
   },
 
   uploadPdf: async (file: File): Promise<{ message: string; document_id: number; status: string }> => {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await axios.post(`${API_BASE_URL}/admin/upload-pdf`, formData);
+    const response = await adminApiClient.post('/admin/upload-pdf', formData);
     return response.data;
   },
 
@@ -109,7 +121,7 @@ export const adminApi = {
     formData.append('file', file);
     if (title) formData.append('title', title);
     if (category) formData.append('category', category);
-    const response = await axios.post(`${API_BASE_URL}/admin/upload-md`, formData);
+    const response = await adminApiClient.post('/admin/upload-md', formData);
     return response.data;
   },
 
@@ -120,52 +132,52 @@ export const adminApi = {
     const formData = new FormData();
     formData.append('catalog', catalogFile);
     mdFiles.forEach(f => formData.append('files', f));
-    const response = await axios.post(`${API_BASE_URL}/admin/import-catalog`, formData);
+    const response = await adminApiClient.post('/admin/import-catalog', formData);
     return response.data;
   },
 
   getDocuments: async (): Promise<{ documents: AdminDocument[] }> => {
-    const response = await apiClient.get('/admin/documents');
+    const response = await adminApiClient.get('/admin/documents');
     return response.data;
   },
 
   deleteDocument: async (documentId: number): Promise<{ message: string }> => {
-    const response = await apiClient.delete(`/admin/documents/${documentId}`);
+    const response = await adminApiClient.delete(`/admin/documents/${documentId}`);
     return response.data;
   },
 
   retryDocument: async (documentId: number): Promise<{ message: string }> => {
-    const response = await apiClient.post(`/admin/documents/${documentId}/retry`, {});
+    const response = await adminApiClient.post(`/admin/documents/${documentId}/retry`, {});
     return response.data;
   },
 
   reindex: async (): Promise<{ message: string; strategy: string }> => {
-    const response = await apiClient.post('/admin/reindex', {});
+    const response = await adminApiClient.post('/admin/reindex', {});
     return response.data;
   },
 
   getFaqs: async (): Promise<{ faqs: AdminFaq[] }> => {
-    const response = await apiClient.get('/admin/faqs');
+    const response = await adminApiClient.get('/admin/faqs');
     return response.data;
   },
 
   updateFaqs: async (faqs: AdminFaq[]): Promise<{ message: string }> => {
-    const response = await apiClient.put('/admin/faqs', { faqs });
+    const response = await adminApiClient.put('/admin/faqs', { faqs });
     return response.data;
   },
 
   getPrompts: async (): Promise<{ prompts: PromptConfig[] }> => {
-    const response = await apiClient.get('/admin/prompts');
+    const response = await adminApiClient.get('/admin/prompts');
     return response.data;
   },
 
   updatePrompts: async (prompts: PromptConfig[]): Promise<{ message: string }> => {
-    const response = await apiClient.put('/admin/prompts', { prompts });
+    const response = await adminApiClient.put('/admin/prompts', { prompts });
     return response.data;
   },
 
   getLogs: async (): Promise<{ processing_logs: ProcessingLog[]; chat_logs: ChatLog[] }> => {
-    const response = await apiClient.get('/admin/logs');
+    const response = await adminApiClient.get('/admin/logs');
     return response.data;
   },
 };

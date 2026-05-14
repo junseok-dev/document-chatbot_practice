@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { adminApi } from '../services/api';
+import { adminApi, getAdminPassword } from '../services/api';
 import { AdminSessionDetail } from '../types';
 
 const SOURCE_BADGE: Record<string, { label: string; className: string }> = {
@@ -18,12 +18,16 @@ export default function AdminSessionPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (!getAdminPassword()) {
+      navigate('/admin');
+      return;
+    }
     if (!sessionId) return;
     adminApi
       .getSessionDetail(sessionId)
       .then(setDetail)
       .catch(() => setError('세션 정보를 불러오지 못했습니다.'));
-  }, [sessionId]);
+  }, [sessionId, navigate]);
 
   if (error) {
     return (
