@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Message } from '../../types';
 
@@ -7,8 +7,15 @@ interface Props {
   isStreaming?: boolean;
 }
 
+const THINKING_STATUSES = [
+  '질문의 핵심을 보고 있어요.',
+  '관련된 안내를 찾고 있어요.',
+  '쉽게 말할 답변을 정리하고 있어요.',
+];
+
 const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
   const isUser = message.role === 'user';
+  const [statusIndex, setStatusIndex] = useState(0);
   const timeString = new Date(message.timestamp).toLocaleTimeString('ko-KR', {
     hour: '2-digit',
     minute: '2-digit',
@@ -17,6 +24,19 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
     .split(/\n{2,}/)
     .map((part) => part.trim())
     .filter(Boolean);
+
+  useEffect(() => {
+    if (!isStreaming) {
+      setStatusIndex(0);
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setStatusIndex((current) => (current + 1) % THINKING_STATUSES.length);
+    }, 1400);
+
+    return () => window.clearInterval(timer);
+  }, [isStreaming]);
 
   if (isUser) {
     return (
@@ -42,11 +62,14 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
         <div className="flex items-end gap-1.5">
           <div className="flex flex-col items-start gap-1.5">
             {isStreaming ? (
-              <div className="rounded-2xl rounded-tl-sm bg-white px-4 py-3 text-[14px] leading-relaxed text-gray-800 shadow-sm border border-gray-100">
-                <div className="flex gap-1 py-0.5">
-                  <div className="w-1.5 h-1.5 bg-brand-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                  <div className="w-1.5 h-1.5 bg-brand-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                  <div className="w-1.5 h-1.5 bg-brand-400 rounded-full animate-bounce" />
+              <div className="w-fit max-w-full rounded-2xl rounded-tl-sm bg-white px-4 py-2.5 text-[14px] leading-relaxed text-gray-800 shadow-sm border border-gray-100">
+                <div className="flex items-center gap-2">
+                  <span className="break-keep">{THINKING_STATUSES[statusIndex]}</span>
+                  <span className="flex gap-0.5 pt-1">
+                    <span className="h-1 w-1 rounded-full bg-brand-400 animate-bounce [animation-delay:-0.3s]" />
+                    <span className="h-1 w-1 rounded-full bg-brand-400 animate-bounce [animation-delay:-0.15s]" />
+                    <span className="h-1 w-1 rounded-full bg-brand-400 animate-bounce" />
+                  </span>
                 </div>
               </div>
             ) : (
