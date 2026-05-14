@@ -1,3 +1,4 @@
+import asyncio
 from typing import AsyncGenerator
 
 from openai import AsyncOpenAI
@@ -9,7 +10,7 @@ from app.services.response_formatter import format_chat_response
 settings = get_settings()
 client = AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
 MAX_COMPLETION_TOKENS = 4096
-THINKING_BUBBLE = "잠깐만요, 확인해볼게요."
+BUBBLE_PAUSE_SECONDS = 2.0
 
 CHAT_STYLE_GUIDE = """
 [Counselor chat style]
@@ -105,14 +106,25 @@ async def get_ai_response_stream(question: str, context: str, history: list[dict
     ) if context else f"[사용자 질문]\n{question}"
     messages = _build_messages(system_prompt, user_message, history or [])
 
-    yield THINKING_BUBBLE
-
-    response = await client.chat.completions.create(
+    stream = await client.chat.completions.create(
         model=settings.model_name,
         messages=messages,
         max_completion_tokens=MAX_COMPLETION_TOKENS,
+        stream=True,
     )
 
-    content = response.choices[0].message.content or ""
-    formatted = format_chat_response(content) or format_chat_response(STANDARD_REFUSAL)
-    yield f"\n\n{formatted}"
+    buffer = ""
+    async for chunk in stream:
+        if not chunk.choices or not chunk.choices[0].delta.content:
+            continue
+
+        buffer += chunk.choices[0].delta.content
+        while "\n\n" in buffer:
+            bubble, buffer = buffer.split("\n\n", 1)
+            if bubble:
+                yield bubble
+            yield "\n\n"
+            await asyncio.sleep(BUBBLE_PAUSE_SECONDS)
+
+    if buffer.strip():
+        yield buffer

@@ -209,11 +209,14 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
         async def _stream_static(text: str) -> None:
             nonlocal full_answer
             full_answer = format_chat_response(text)
-            lines = full_answer.splitlines()
-            for i, line in enumerate(lines):
-                token = line if i == 0 else f"\n{line}"
-                yield _sse({"token": token})
-                await asyncio.sleep(0.015)
+            bubbles = full_answer.split("\n\n")
+            for bubble_index, bubble in enumerate(bubbles):
+                if bubble_index > 0:
+                    yield _sse({"token": "\n\n"})
+                    await asyncio.sleep(2.0)
+                for char in bubble:
+                    yield _sse({"token": char})
+                    await asyncio.sleep(0.015)
 
         blocked = guardrail_check(request.message)
         if blocked:
