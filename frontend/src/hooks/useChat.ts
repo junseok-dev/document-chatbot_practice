@@ -6,12 +6,12 @@ const generateId = () => Math.random().toString(36).substring(2, 15);
 
 const CONVERSATIONS_KEY = 'chatConversations';
 const CURRENT_CONV_KEY = 'chatCurrentConvId';
+const QUESTION_DEBOUNCE_MS = 1000;
 
 const WELCOME_MESSAGE: Message = {
   id: 'welcome',
   role: 'assistant',
-  content:
-    '안녕하세요! 엔코아AI캠퍼스 상담 챗봇입니다. 인터뷰, 교육 프로그램, 수강신청 등 궁금하신 내용을 편하게 물어봐 주세요 😊',
+  content: '안녕하세요!\n\n엔코아AI캠퍼스 상담봇입니다. 궁금한 내용을 편하게 물어봐 주세요.',
   timestamp: new Date().toISOString(),
 };
 
@@ -44,8 +44,8 @@ const saveConversation = (conv: Conversation) => {
 const makeConversation = (id: string, sessionId: string, messages: Message[]): Conversation => {
   const firstUser = messages.find((m) => m.role === 'user');
   const title = firstUser
-    ? firstUser.content.slice(0, 28) + (firstUser.content.length > 28 ? '…' : '')
-    : '새 대화';
+    ? firstUser.content.slice(0, 28) + (firstUser.content.length > 28 ? '...' : '')
+    : '새 상담';
   return { id, title, messages, startedAt: messages[0]?.timestamp ?? new Date().toISOString(), sessionId };
 };
 
@@ -65,9 +65,18 @@ export const useChat = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [suggestedQuestions, setSuggestedQuestions] = useState<SuggestedQuestion[]>([]);
+
   const sessionIdRef = useRef(newSessionId());
+  const messagesRef = useRef<Message[]>(messages);
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeBotIdRef = useRef<string | null>(null);
+  const pendingQuestionsRef = useRef<string[]>([]);
+  const pendingUserIdsRef = useRef<string[]>([]);
+  const responseTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     sessionStorage.setItem(CURRENT_CONV_KEY, convId);
@@ -86,110 +95,164 @@ export const useChat = () => {
       .catch((err) => console.error('Failed to load suggested questions:', err));
   }, []);
 
-  const stopGenerating = useCallback(() => {
+  const removeActiveBot = useCallback(() => {
+    if (!activeBotIdRef.current) return;
+    const activeId = activeBotIdRef.current;
+    const next = messagesRef.current.filter((m) => m.id !== activeId);
+    messagesRef.current = next;
+    setMessages(next);
+    activeBotIdRef.current = null;
+  }, []);
+
+  const cancelActiveResponse = useCallback(() => {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
-    setIsLoading(false);
     setStreamingMessageId(null);
-    if (activeBotIdRef.current) {
-      const activeId = activeBotIdRef.current;
-      setMessages((prev) => prev.filter((m) => m.id !== activeId));
-      activeBotIdRef.current = null;
+    removeActiveBot();
+  }, [removeActiveBot]);
+
+  const stopGenerating = useCallback(() => {
+    if (responseTimerRef.current !== null) {
+      window.clearTimeout(responseTimerRef.current);
+      responseTimerRef.current = null;
     }
+    pendingQuestionsRef.current = [];
+    pendingUserIdsRef.current = [];
+    cancelActiveResponse();
+    setIsLoading(false);
+  }, [cancelActiveResponse]);
+
+  const startResponse = useCallback(async () => {
+    responseTimerRef.current = null;
+
+    const questions = [...pendingQuestionsRef.current];
+    const pendingUserIds = [...pendingUserIdsRef.current];
+    pendingQuestionsRef.current = [];
+    pendingUserIdsRef.current = [];
+
+    if (!questions.length) {
+      setIsLoading(false);
+      return;
+    }
+
+    const combinedQuestion = questions.join('\n');
+    const botId = generateId();
+    const botPlaceholder: Message = {
+      id: botId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date().toISOString(),
+    };
+
+    const withBot = [...messagesRef.current, botPlaceholder];
+    messagesRef.current = withBot;
+    setMessages(withBot);
+    setIsLoading(true);
+    setStreamingMessageId(botId);
+    activeBotIdRef.current = botId;
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    const history = messagesRef.current
+      .filter((m) => m.id !== 'welcome' && m.id !== botId && !pendingUserIds.includes(m.id) && m.content.trim())
+      .slice(-10)
+      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+
+    await chatApi.streamMessage(
+      sessionIdRef.current,
+      combinedQuestion,
+      history,
+      (token) => {
+        const next = messagesRef.current.map((m) =>
+          m.id === botId ? { ...m, content: m.content + token } : m,
+        );
+        messagesRef.current = next;
+        setMessages(next);
+      },
+      (source, handoffUrl) => {
+        const next = messagesRef.current.map((m) =>
+          m.id === botId ? { ...m, source: source as Message['source'], handoff_url: handoffUrl } : m,
+        );
+        messagesRef.current = next;
+        setMessages(next);
+        setIsLoading(false);
+        setStreamingMessageId(null);
+        abortControllerRef.current = null;
+        activeBotIdRef.current = null;
+      },
+      () => {
+        const next = messagesRef.current.map((m) =>
+          m.id === botId
+            ? {
+                ...m,
+                content: '서버와 통신하는 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.',
+                source: 'fallback' as Message['source'],
+              }
+            : m,
+        );
+        messagesRef.current = next;
+        setMessages(next);
+        setIsLoading(false);
+        setStreamingMessageId(null);
+        abortControllerRef.current = null;
+        activeBotIdRef.current = null;
+      },
+      controller.signal,
+    );
   }, []);
 
   const sendMessage = useCallback(
-    async (content: string) => {
-      if (!content.trim()) return;
+    (content: string) => {
+      const trimmed = content.trim();
+      if (!trimmed) return;
+
       if (isLoading) {
-        stopGenerating();
+        cancelActiveResponse();
       }
 
       const userMessage: Message = {
         id: generateId(),
         role: 'user',
-        content,
+        content: trimmed,
         timestamp: new Date().toISOString(),
       };
 
-      const botId = generateId();
-      const botPlaceholder: Message = {
-        id: botId,
-        role: 'assistant',
-        content: '',
-        timestamp: new Date().toISOString(),
-      };
+      const next = [...messagesRef.current, userMessage];
+      messagesRef.current = next;
+      setMessages(next);
 
-      setMessages((prev) => [...prev, userMessage, botPlaceholder]);
+      pendingQuestionsRef.current.push(trimmed);
+      pendingUserIdsRef.current.push(userMessage.id);
       setIsLoading(true);
-      setStreamingMessageId(botId);
-      activeBotIdRef.current = botId;
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
 
-      // 최근 10개 메시지를 대화 이력으로 구성 (웰컴/빈 메시지 제외, 현재 질문 제외)
-      const history = messages
-        .filter((m) => m.id !== 'welcome' && m.id !== streamingMessageId && m.content.trim())
-        .slice(-10)
-        .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
-
-      await chatApi.streamMessage(
-        sessionIdRef.current,
-        content,
-        history,
-        (token) => {
-          setMessages((prev) =>
-            prev.map((m) => (m.id === botId ? { ...m, content: m.content + token } : m)),
-          );
-        },
-        (source, handoffUrl) => {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === botId
-                ? { ...m, source: source as Message['source'], handoff_url: handoffUrl }
-                : m,
-            ),
-          );
-          setIsLoading(false);
-          setStreamingMessageId(null);
-          abortControllerRef.current = null;
-          activeBotIdRef.current = null;
-        },
-        () => {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === botId
-                ? {
-                    ...m,
-                    content: '서버와 통신하는 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.',
-                    source: 'fallback',
-                  }
-                : m,
-            ),
-          );
-          setIsLoading(false);
-          setStreamingMessageId(null);
-          abortControllerRef.current = null;
-          activeBotIdRef.current = null;
-        },
-        controller.signal,
-      );
+      if (responseTimerRef.current !== null) {
+        window.clearTimeout(responseTimerRef.current);
+      }
+      responseTimerRef.current = window.setTimeout(() => {
+        void startResponse();
+      }, QUESTION_DEBOUNCE_MS);
     },
-    [isLoading, stopGenerating, messages, streamingMessageId],
+    [cancelActiveResponse, isLoading, startResponse],
   );
 
   const startNewChat = useCallback(() => {
+    stopGenerating();
     const id = newConvId();
+    const welcome = { ...WELCOME_MESSAGE, id: 'welcome', timestamp: new Date().toISOString() };
     sessionIdRef.current = newSessionId();
     setConvId(id);
-    setMessages([{ ...WELCOME_MESSAGE, id: 'welcome', timestamp: new Date().toISOString() }]);
-  }, []);
+    messagesRef.current = [welcome];
+    setMessages([welcome]);
+  }, [stopGenerating]);
 
   const loadConversation = useCallback((conv: Conversation) => {
+    stopGenerating();
     sessionIdRef.current = conv.sessionId;
     setConvId(conv.id);
+    messagesRef.current = conv.messages;
     setMessages(conv.messages);
-  }, []);
+  }, [stopGenerating]);
 
   return {
     messages,
