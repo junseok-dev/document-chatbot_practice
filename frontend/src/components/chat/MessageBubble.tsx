@@ -4,9 +4,10 @@ import { Message } from '../../types';
 
 interface Props {
   message: Message;
+  isStreaming?: boolean;
 }
 
-const MessageBubble: React.FC<Props> = ({ message }) => {
+const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
   const isUser = message.role === 'user';
   const timeString = new Date(message.timestamp).toLocaleTimeString('ko-KR', {
     hour: '2-digit',
@@ -37,9 +38,17 @@ const MessageBubble: React.FC<Props> = ({ message }) => {
         <span className="mb-1 text-[12px] font-semibold text-gray-600">엔코아AI캠퍼스</span>
         <div className="flex items-end gap-1.5">
           <div className="rounded-2xl rounded-tl-sm bg-white px-4 py-2.5 text-[14px] leading-relaxed text-gray-800 shadow-sm border border-gray-100">
+            {isStreaming ? (
+              <div className="flex gap-1 py-0.5">
+                <div className="w-1.5 h-1.5 bg-brand-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                <div className="w-1.5 h-1.5 bg-brand-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                <div className="w-1.5 h-1.5 bg-brand-400 rounded-full animate-bounce" />
+              </div>
+            ) : (
             <div className="prose prose-sm prose-brand max-w-none prose-p:my-0.5 prose-a:text-brand-600 prose-a:no-underline hover:prose-a:underline prose-ul:my-1 prose-li:my-0.5">
               <ReactMarkdown>{message.content}</ReactMarkdown>
             </div>
+            )}
 
             {message.source && !['fallback', 'handoff', 'guardrail'].includes(message.source) && (
               <div className="mt-2 border-t border-gray-100 pt-1.5 text-[10px] text-gray-400 text-right">

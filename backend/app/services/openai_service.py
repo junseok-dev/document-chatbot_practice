@@ -1,3 +1,5 @@
+from typing import AsyncGenerator
+
 from openai import AsyncOpenAI
 
 from app.config import get_settings
@@ -35,3 +37,27 @@ async def get_ai_response(question: str, context: str) -> tuple[str, float]:
     total_tokens = getattr(usage, "total_tokens", 0) or 0
     estimated_cost = round(total_tokens * 0.000001, 6)
     return _normalize_response(content), estimated_cost
+
+
+async def get_ai_response_stream(question: str, context: str) -> AsyncGenerator[str, None]:
+    """OpenAI 스트리밍 API를 사용해 텍스트 토큰을 순차적으로 yield."""
+    if client is None:
+        yield STANDARD_REFUSAL
+        return
+
+    system_prompt = get_prompt_value("counseling_prompt")
+    user_message = f"[참고 문서]\n{context}\n\n[질문]\n{question}" if context else f"[질문]\n{question}"
+
+    stream = await client.chat.completions.create(
+        model=settings.model_name,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ],
+        max_completion_tokens=4096,
+        stream=True,
+    )
+
+    async for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content

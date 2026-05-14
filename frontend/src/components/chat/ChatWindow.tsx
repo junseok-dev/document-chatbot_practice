@@ -7,11 +7,12 @@ import SuggestedQuestions from './SuggestedQuestions';
 interface Props {
   messages: Message[];
   isLoading: boolean;
+  streamingMessageId: string | null;
   suggestedQuestions: SuggestedQuestion[];
   sendMessage: (content: string) => void;
 }
 
-const ChatWindow: React.FC<Props> = ({ messages, isLoading, suggestedQuestions, sendMessage }) => {
+const ChatWindow: React.FC<Props> = ({ messages, isLoading, streamingMessageId, suggestedQuestions, sendMessage }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -19,16 +20,22 @@ const ChatWindow: React.FC<Props> = ({ messages, isLoading, suggestedQuestions, 
   }, [messages, isLoading]);
 
   const showSuggestions = !isLoading && messages[messages.length - 1]?.role === 'assistant';
+  // 스트리밍 메시지가 아직 없을 때만 외부 로딩 인디케이터 표시
+  const showLoadingDots = isLoading && !streamingMessageId;
 
   return (
     <div className="flex h-full flex-col bg-[#EEF4FF]">
       {/* 메시지 영역 */}
       <div className="flex-1 overflow-y-auto py-4 space-y-0.5">
         {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
+          <MessageBubble
+            key={message.id}
+            message={message}
+            isStreaming={message.id === streamingMessageId && message.content === ''}
+          />
         ))}
 
-        {isLoading && (
+        {showLoadingDots && (
           <div className="flex items-start gap-2.5 px-4 mb-1">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-white text-xs font-bold shadow-sm">
               AI

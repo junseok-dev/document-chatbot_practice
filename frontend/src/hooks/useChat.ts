@@ -63,6 +63,7 @@ export const useChat = () => {
     return conv ? conv.messages : [WELCOME_MESSAGE];
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [suggestedQuestions, setSuggestedQuestions] = useState<SuggestedQuestion[]>([]);
   const sessionIdRef = useRef(newSessionId());
 
@@ -94,34 +95,53 @@ export const useChat = () => {
         timestamp: new Date().toISOString(),
       };
 
-      setMessages((prev) => [...prev, userMessage]);
-      setIsLoading(true);
+      const botId = generateId();
+      const botPlaceholder: Message = {
+        id: botId,
+        role: 'assistant',
+        content: '',
+        timestamp: new Date().toISOString(),
+      };
 
-      try {
-        const response = await chatApi.sendMessage(sessionIdRef.current, content);
-        const botMessage: Message = {
-          id: generateId(),
-          role: 'assistant',
-          content: response.answer,
-          source: response.source,
-          handoff_url: response.handoff_url ?? null,
-          timestamp: new Date().toISOString(),
-        };
-        setMessages((prev) => [...prev, botMessage]);
-      } catch {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: generateId(),
-            role: 'assistant',
-            content: '서버와 통신하는 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.',
-            source: 'fallback',
-            timestamp: new Date().toISOString(),
-          },
-        ]);
-      } finally {
-        setIsLoading(false);
-      }
+      setMessages((prev) => [...prev, userMessage, botPlaceholder]);
+      setIsLoading(true);
+      setStreamingMessageId(botId);
+
+      await chatApi.streamMessage(
+        sessionIdRef.current,
+        content,
+        (token) => {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === botId ? { ...m, content: m.content + token } : m)),
+          );
+        },
+        (source, handoffUrl) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === botId
+                ? { ...m, source: source as Message['source'], handoff_url: handoffUrl }
+                : m,
+            ),
+          );
+          setIsLoading(false);
+          setStreamingMessageId(null);
+        },
+        () => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === botId
+                ? {
+                    ...m,
+                    content: '서버와 통신하는 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.',
+                    source: 'fallback',
+                  }
+                : m,
+            ),
+          );
+          setIsLoading(false);
+          setStreamingMessageId(null);
+        },
+      );
     },
     [isLoading],
   );
@@ -142,6 +162,7 @@ export const useChat = () => {
   return {
     messages,
     isLoading,
+    streamingMessageId,
     suggestedQuestions,
     sendMessage,
     startNewChat,

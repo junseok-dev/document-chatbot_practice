@@ -1,6 +1,8 @@
+import asyncio
 import json
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -11,7 +13,7 @@ from app.models.chat import ChatRequest, ChatResponse, SuggestedQuestionsRespons
 from app.services.document_service import search_documents
 from app.services.faq_service import get_suggested_questions, is_guide_query, match_button_faq, search_faq
 from app.services.guardrail_service import check as guardrail_check
-from app.services.openai_service import get_ai_response
+from app.services.openai_service import get_ai_response, get_ai_response_stream
 from app.services.prompt_service import get_prompt_value
 
 router = APIRouter()
@@ -186,6 +188,116 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         source=source,
         session_id=request.session_id,
         handoff_url=handoff_url,
+    )
+
+
+@router.post("/stream")
+async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
+    get_or_create_session(db, request.session_id, None)
+    save_message(db, request.session_id, "user", request.message, source="user")
+    db.commit()
+
+    async def generate():
+        source = "fallback"
+        full_answer = ""
+        error_message = None
+        processing_status = "ready"
+        retrieval_chunks: list[str] = []
+
+        def _sse(data: dict) -> str:
+            return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+        async def _stream_static(text: str) -> None:
+            nonlocal full_answer
+            full_answer = text
+            words = text.split(" ")
+            for i, word in enumerate(words):
+                token = word if i == len(words) - 1 else word + " "
+                yield _sse({"token": token})
+                await asyncio.sleep(0.015)
+
+        blocked = guardrail_check(request.message)
+        if blocked:
+            source = "guardrail"
+            async for chunk in _stream_static(blocked):
+                yield chunk
+        elif is_cancel_request(request.message):
+            source = "handoff"
+            processing_status = "handoff"
+            db.add(CancelRequest(session_id=request.session_id, message=request.message, status="requested"))
+            db.commit()
+            async for chunk in _stream_static(get_prompt_value("cancel_prompt")):
+                yield chunk
+        elif is_handoff_request(request.message):
+            source = "handoff"
+            processing_status = "handoff"
+            async for chunk in _stream_static(get_prompt_value("handoff_prompt")):
+                yield chunk
+        elif is_greeting(request.message):
+            source = "faq"
+            async for chunk in _stream_static(GREETING_ANSWER):
+                yield chunk
+        elif btn := match_button_faq(request.message):
+            source = "faq"
+            async for chunk in _stream_static(btn):
+                yield chunk
+        else:
+            if is_guide_query(request.message):
+                faq_answer = search_faq(request.message)
+                static_text = faq_answer if faq_answer else (
+                    "플레이데이터 상담봇에서는 다음 카테고리의 질문을 도와드릴 수 있어요.\n\n"
+                    "- **법률**: 개인정보 처리방침, 이용약관, 법적 고지 등\n"
+                    "- **운영규정**: 수강 규정, 출결 기준, 수료 조건, 환불 정책 등\n"
+                    "- **과정 상세**: 커리큘럼, 교육 기간, 비용, 취업 지원 등\n"
+                    "- **플레이데이터 정보**: 회사 소개, 오시는 길, 채용, 제휴 등\n\n"
+                    "궁금하신 내용을 구체적으로 질문해 주시면 더 정확하게 안내드릴게요!"
+                )
+                source = "faq"
+                async for chunk in _stream_static(static_text):
+                    yield chunk
+            else:
+                result = search_documents(request.message)
+                retrieval_chunks = result.chunks
+                try:
+                    async for token in get_ai_response_stream(request.message, result.context):
+                        full_answer += token
+                        yield _sse({"token": token})
+                    source = "document" if result.context else "ai"
+                except Exception as exc:
+                    fallback = get_prompt_value("fallback_prompt")
+                    source = "fallback"
+                    processing_status = "failed"
+                    error_message = str(exc)
+                    async for chunk in _stream_static(fallback):
+                        yield chunk
+
+        handoff_url: str | None = None
+        if source == "handoff":
+            url = get_settings().channel_talk_url
+            handoff_url = url if url else None
+
+        yield _sse({"done": True, "source": source, "handoff_url": handoff_url})
+
+        save_message(db, request.session_id, "assistant", full_answer, source=source)
+        db.add(
+            ChatLog(
+                session_id=request.session_id,
+                question=request.message,
+                retrieval_chunks=json.dumps(retrieval_chunks, ensure_ascii=False),
+                answer=full_answer,
+                source=source,
+                error=error_message,
+                processing_status=processing_status,
+                embedding_cost=0.0,
+                llm_cost=0.0,
+            )
+        )
+        db.commit()
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

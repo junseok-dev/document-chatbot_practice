@@ -27,6 +27,54 @@ export const chatApi = {
     return response.data;
   },
 
+  streamMessage: async (
+    sessionId: string,
+    message: string,
+    onToken: (token: string) => void,
+    onDone: (source: string, handoffUrl: string | null) => void,
+    onError: () => void,
+  ): Promise<void> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/chat/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, message }),
+      });
+
+      if (!response.ok || !response.body) {
+        onError();
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() ?? '';
+
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith('data: ')) continue;
+          const data = JSON.parse(line.slice(6));
+          if (data.token !== undefined) {
+            onToken(data.token);
+          }
+          if (data.done) {
+            onDone(data.source ?? 'faq', data.handoff_url ?? null);
+          }
+        }
+      }
+    } catch {
+      onError();
+    }
+  },
+
   getSuggestedQuestions: async (): Promise<SuggestedQuestionsResponse> => {
     const response = await apiClient.get<SuggestedQuestionsResponse>('/chat/suggested');
     return response.data;
