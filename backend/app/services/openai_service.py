@@ -9,6 +9,7 @@ from app.services.response_formatter import format_chat_response
 settings = get_settings()
 client = AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
 MAX_COMPLETION_TOKENS = 4096
+THINKING_BUBBLE = "잠깐만요, 확인해볼게요."
 
 CHAT_STYLE_GUIDE = """
 [Counselor chat style]
@@ -19,13 +20,25 @@ CHAT_STYLE_GUIDE = """
 - Sound like a human counselor in chat.
 - Put one complete thought in each chat bubble.
 - Separate chat bubbles with one blank line.
-- Use 2 to 6 short chat bubbles.
+- Use 2 to 4 short chat bubbles.
 - Do not split words or sentences awkwardly.
 - Prefer complete sentences in each bubble.
 - Start with the core answer.
 - Leave extra details for follow-up questions.
 - Avoid long lists, headings, source labels, and document-summary tone.
+- Do not say "I'll summarize everything" or "I'll organize all information".
 - Do not say "according to the document" or "reference document".
+
+[Example for broad course questions]
+User: ai 과정에 대해서 설명해줘
+Assistant:
+AI 과정은 목표별로 달라요.
+
+자동화와 서비스 기획이면 AI 오케스트레이션이 맞고,
+
+RAG나 검색 정확도 쪽이면 머신러닝 엔지니어가 맞아요.
+
+운영과 배포 자동화가 좋다면 MLOps 쪽이에요.
 """
 
 STANDARD_REFUSAL = "참고 문서에서 확인되지 않습니다. 정확한 안내는 관리자 확인이 필요합니다."
@@ -92,29 +105,14 @@ async def get_ai_response_stream(question: str, context: str, history: list[dict
     ) if context else f"[사용자 질문]\n{question}"
     messages = _build_messages(system_prompt, user_message, history or [])
 
-    stream = await client.chat.completions.create(
+    yield THINKING_BUBBLE
+
+    response = await client.chat.completions.create(
         model=settings.model_name,
         messages=messages,
         max_completion_tokens=MAX_COMPLETION_TOKENS,
-        stream=True,
     )
 
-    full_answer = ""
-    emitted = ""
-    async for chunk in stream:
-        if chunk.choices and chunk.choices[0].delta.content:
-            full_answer += chunk.choices[0].delta.content
-            formatted = format_chat_response(full_answer)
-            if formatted and formatted.startswith(emitted):
-                delta = formatted[len(emitted):]
-                if delta:
-                    emitted = formatted
-                    yield delta
-
-    formatted = format_chat_response(full_answer) or format_chat_response(STANDARD_REFUSAL)
-    if not emitted:
-        yield formatted
-    elif formatted.startswith(emitted):
-        delta = formatted[len(emitted):]
-        if delta:
-            yield delta
+    content = response.choices[0].message.content or ""
+    formatted = format_chat_response(content) or format_chat_response(STANDARD_REFUSAL)
+    yield f"\n\n{formatted}"
