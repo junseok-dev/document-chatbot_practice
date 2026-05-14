@@ -112,10 +112,21 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         source = "handoff"
         processing_status = "handoff"
     else:
-        faq_answer = search_faq(request.message) if is_guide_query(request.message) else None
-        if faq_answer:
-            answer = faq_answer
-            source = "faq"
+        if is_guide_query(request.message):
+            faq_answer = search_faq(request.message)
+            if faq_answer:
+                answer = faq_answer
+                source = "faq"
+            else:
+                answer = (
+                    "플레이데이터 상담봇에서는 다음 카테고리의 질문을 도와드릴 수 있어요.\n\n"
+                    "- **법률**: 개인정보 처리방침, 이용약관, 법적 고지 등\n"
+                    "- **운영규정**: 수강 규정, 출결 기준, 수료 조건, 환불 정책 등\n"
+                    "- **과정 상세**: 커리큘럼, 교육 기간, 비용, 취업 지원 등\n"
+                    "- **플레이데이터 정보**: 회사 소개, 오시는 길, 채용, 제휴 등\n\n"
+                    "궁금하신 내용을 구체적으로 질문해 주시면 더 정확하게 안내드릴게요!"
+                )
+                source = "faq"
         else:
             result = search_documents(request.message)
             retrieval_chunks = result.chunks
@@ -144,11 +155,16 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     )
     db.commit()
 
+    handoff_url: str | None = None
+    if source == "handoff":
+        url = get_settings().channel_talk_url
+        handoff_url = url if url else None
+
     return ChatResponse(
         answer=answer,
         source=source,
         session_id=request.session_id,
-        handoff_url=get_settings().channel_talk_url or None,
+        handoff_url=handoff_url,
     )
 
 

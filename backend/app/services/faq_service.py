@@ -187,6 +187,13 @@ def is_guide_query(query: str) -> bool:
         "카테고리",
         "처음인데",
         "무엇을 물어",
+        "어떤 걸 물어",   # "법 관련해서는 어떤 걸 물어보면 돼?"
+        "어떤 거 물어",   # 맞춤법 변형
+        "뭘 물어",         # "플레이데이터 정보 쪽에서는 뭘 물어보면 돼?"
+        "물어볼 수 있",   # "어떤 걸 물어볼 수 있어?"
+        "질문할 수 있",
+        "어떤 내용",
+        "무슨 내용",
     ]
     return any(signal in normalized for signal in guide_signals)
 

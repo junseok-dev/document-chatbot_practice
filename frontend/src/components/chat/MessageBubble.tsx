@@ -47,22 +47,28 @@ const MessageBubble: React.FC<Props> = ({ message }) => {
               </div>
             )}
 
-            {!isUser && message.source && message.source !== 'fallback' && (
+            {!isUser && message.source && !['fallback', 'handoff', 'guardrail'].includes(message.source) && (
               <div className="mt-2 flex justify-end border-t border-gray-100/10 pt-2 text-[10px] opacity-60">
                 {message.source === 'faq' ? 'FAQ 답변' : 'AI 분석 답변'}
               </div>
             )}
 
-            {!isUser && message.handoff_url && (message.source === 'fallback' || message.source === 'handoff') && (
+            {!isUser && (message.source === 'fallback' || message.source === 'handoff') && (
               <div className="mt-3">
-                <a
-                  href={message.handoff_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex rounded-lg bg-amber-500 px-3 py-2 text-sm font-medium text-white hover:bg-amber-600"
-                >
-                  채널톡으로 문의하기
-                </a>
+                {message.handoff_url ? (
+                  <a
+                    href={message.handoff_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex rounded-lg bg-amber-500 px-3 py-2 text-sm font-medium text-white hover:bg-amber-600"
+                  >
+                    상담 매니저 연결하기
+                  </a>
+                ) : (
+                  <p className="text-xs text-amber-600">
+                    상담 매니저와 연결이 필요합니다. 채널톡으로 문의해 주세요.
+                  </p>
+                )}
               </div>
             )}
           </div>
