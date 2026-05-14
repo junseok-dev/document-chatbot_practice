@@ -30,7 +30,7 @@ async def get_ai_response(question: str, context: str, history: list[dict] | Non
         return STANDARD_REFUSAL, 0.0
 
     system_prompt = get_prompt_value("counseling_prompt")
-    user_message = f"[참고 문서]\n{context}\n\n[질문]\n{question}" if context else f"[질문]\n{question}"
+    user_message = f"[상담 참고 정보]\n{context}\n\n[사용자 질문]\n{question}" if context else f"[사용자 질문]\n{question}"
     messages = _build_messages(system_prompt, user_message, history or [])
 
     response = await client.chat.completions.create(
@@ -53,7 +53,7 @@ async def get_ai_response_stream(question: str, context: str, history: list[dict
         return
 
     system_prompt = get_prompt_value("counseling_prompt")
-    user_message = f"[참고 문서]\n{context}\n\n[질문]\n{question}" if context else f"[질문]\n{question}"
+    user_message = f"[상담 참고 정보]\n{context}\n\n[사용자 질문]\n{question}" if context else f"[사용자 질문]\n{question}"
     messages = _build_messages(system_prompt, user_message, history or [])
 
     stream = await client.chat.completions.create(
