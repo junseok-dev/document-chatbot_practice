@@ -1,27 +1,123 @@
-from sqlalchemy import Column, String, Text, DateTime, Integer
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, Text, String
 from sqlalchemy.sql import func
+
 from app.db.database import Base
 
 
 class ChatSession(Base):
-    """상담 세션 테이블 - 대화 전체 기록"""
     __tablename__ = "chat_sessions"
 
-    id = Column(String(36), primary_key=True, index=True)  # UUID
+    id = Column(String(64), primary_key=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     message_count = Column(Integer, default=0)
-    # 개인정보는 암호화 저장
     encrypted_user_name = Column(Text, nullable=True)
 
 
 class ChatMessage(Base):
-    """개별 메시지 테이블"""
     __tablename__ = "chat_messages"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    session_id = Column(String(36), index=True)
-    role = Column(String(10))           # 'user' | 'assistant'
+    session_id = Column(String(64), index=True)
+    role = Column(String(20))
     content = Column(Text)
-    source = Column(String(20))         # 'faq' | 'document' | 'fallback'
+    source = Column(String(30))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class DocumentRecord(Base):
+    __tablename__ = "documents"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    logical_name = Column(String(255), index=True, nullable=False)
+    version = Column(Integer, default=1, nullable=False)
+    original_filename = Column(String(255), nullable=False)
+    storage_key = Column(String(512), nullable=True)
+    pdf_path = Column(Text, nullable=True)
+    md_path = Column(Text, nullable=True)
+    json_path = Column(Text, nullable=True)
+    chunk_path = Column(Text, nullable=True)
+    embedding_path = Column(Text, nullable=True)
+    parser_type = Column(String(50), nullable=True)
+    status = Column(String(30), index=True, default="uploaded", nullable=False)
+    is_active = Column(Boolean, default=False, nullable=False)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class ChunkRecord(Base):
+    __tablename__ = "chunks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    document_id = Column(Integer, index=True, nullable=False)
+    chunk_index = Column(Integer, nullable=False)
+    content = Column(Text, nullable=False)
+    metadata_json = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class ChatLog(Base):
+    __tablename__ = "chat_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(64), index=True, nullable=False)
+    question = Column(Text, nullable=False)
+    retrieval_chunks = Column(Text, nullable=True)
+    answer = Column(Text, nullable=True)
+    source = Column(String(30), nullable=True)
+    error = Column(Text, nullable=True)
+    processing_status = Column(String(30), default="ready", nullable=False)
+    embedding_cost = Column(Float, default=0.0, nullable=False)
+    llm_cost = Column(Float, default=0.0, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class CancelRequest(Base):
+    __tablename__ = "cancel_requests"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(64), index=True, nullable=False)
+    message = Column(Text, nullable=False)
+    status = Column(String(30), default="requested", nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class ProcessingLog(Base):
+    __tablename__ = "processing_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    document_id = Column(Integer, index=True, nullable=True)
+    log_type = Column(String(30), nullable=False)
+    status = Column(String(30), nullable=False)
+    message = Column(Text, nullable=False)
+    detail = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class PromptConfig(Base):
+    __tablename__ = "prompt_configs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    prompt_key = Column(String(50), unique=True, index=True, nullable=False)
+    label = Column(String(100), nullable=False)
+    content = Column(Text, nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class FaqRecord(Base):
+    __tablename__ = "faqs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    faq_key = Column(String(50), unique=True, index=True, nullable=False)
+    category = Column(String(100), nullable=False)
+    question = Column(Text, nullable=False)
+    answer = Column(Text, nullable=False)
+    keywords_json = Column(Text, nullable=True)
+    aliases_json = Column(Text, nullable=True)
+    search_hints_json = Column(Text, nullable=True)
+    source_files_json = Column(Text, nullable=True)
+    direct_answer = Column(Boolean, default=False, nullable=False)
+    top_k = Column(Integer, default=4, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

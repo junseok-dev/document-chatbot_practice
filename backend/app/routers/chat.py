@@ -1,130 +1,157 @@
+import json
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.models.chat import ChatRequest, ChatResponse, SuggestedQuestionsResponse
-from app.services.faq_service import search_faq, get_suggested_questions, is_guide_query
-from app.services.document_service import search_documents
-from app.services.openai_service import get_ai_response
-from app.services.guardrail_service import check as guardrail_check
-from app.db.database import get_db
+from app.config import get_settings
 from app.db.crud import get_or_create_session, save_message
+from app.db.database import get_db
+from app.db.models import CancelRequest, ChatLog
+from app.models.chat import ChatRequest, ChatResponse, SuggestedQuestionsResponse
+from app.services.document_service import search_documents
+from app.services.faq_service import get_suggested_questions, is_guide_query, search_faq
+from app.services.guardrail_service import check as guardrail_check
+from app.services.openai_service import get_ai_response
+from app.services.prompt_service import get_prompt_value
 from app.utils.crypto import encrypt
 
 router = APIRouter()
 
-ERROR_FALLBACK = (
-    "죄송합니다. 일시적인 오류가 발생했습니다. "
-    "잠시 후 다시 시도하거나 담당자에게 문의해 주세요. "
-    "📞 02-1234-5678 / ✉️ contact@codeai.kr (평일 09:00~18:00)"
-)
+
+def _normalize_intent_text(message: str) -> str:
+    return "".join((message or "").lower().split())
 
 
 def is_handoff_request(message: str) -> bool:
-    lowered = message.lower()
-
+    normalized = _normalize_intent_text(message)
     direct_handoff_signals = [
-        "상담원 연결",
-        "상담 연결",
-        "담당자 연결",
-        "매니저 연결",
-        "채널톡 연결",
+        "상담연결",
+        "사람상담",
+        "매니저연결",
+        "문의연결",
+        "상담원연결",
+        "직원연결",
+        "담당자연결",
     ]
-    if any(signal in lowered for signal in direct_handoff_signals):
+    return any(signal in normalized for signal in direct_handoff_signals)
+
+
+def is_cancel_request(message: str) -> bool:
+    normalized = _normalize_intent_text(message)
+
+    direct_signals = [
+        "취소",
+        "환불",
+        "환급",
+        "철회",
+        "해지",
+        "포기",
+        "그만둘래",
+        "안들을래",
+        "수강안할래",
+        "등록취소",
+        "신청취소",
+        "접수취소",
+        "결제취소",
+        "수강취소",
+        "등록철회",
+        "환불문의",
+        "환불요청",
+        "취소요청",
+        "취소문의",
+    ]
+    if any(signal in normalized for signal in direct_signals):
         return True
 
-    interview_topics = ["오프라인 인터뷰", "인터뷰", "면접", "참여 링크", "링크"]
-    operational_actions = [
-        "일정 변경",
-        "변경",
-        "취소",
-        "예약",
-        "신청",
-        "재전송",
-        "다시 보내",
-        "못 받",
-        "못받",
-        "안 왔",
-        "안왔",
-        "연락",
-        "도와",
-        "부탁",
+    schedule_signals = [
+        "일정변경",
+        "날짜변경",
+        "개강변경",
+        "연기",
+        "미루고",
+        "다음기수",
+        "다른기수",
+        "변경하고싶",
+        "옮기고싶",
     ]
+    if any(signal in normalized for signal in schedule_signals):
+        return True
 
-    return any(topic in lowered for topic in interview_topics) and any(
-        action in lowered for action in operational_actions
+    combined_topics = ["수강", "등록", "신청", "결제", "과정", "교육", "개강", "기수"]
+    combined_actions = ["취소", "환불", "철회", "해지", "연기", "변경", "옮기", "미루"]
+    return any(topic in normalized for topic in combined_topics) and any(
+        action in normalized for action in combined_actions
     )
-
-
-HANDOFF_MESSAGE = (
-    "[상담원 연결] 상담 연결이 필요한 요청입니다. "
-    "성함, 연락처, 요청 내용을 남겨 주세요. "
-    "개인정보 수집·이용에 동의해 주시면 상담 연결을 도와드리겠습니다."
-)
 
 
 @router.post("", response_model=ChatResponse)
 async def chat(request: ChatRequest, db: Session = Depends(get_db)):
-    """
-    사용자 질문 처리 메인 엔드포인트.
-
-    응답 흐름:
-    1. FAQ 키워드 검색 → 매칭 시 즉시 반환 (score ≥ 3)
-    2. Markdown 문서 검색 → 관련 청크 추출 (없으면 빈 문자열)
-    3. OpenAI API 호출 → 시스템 프롬프트가 세 경우 처리:
-       - 문서 있음: 문서 기반 답변
-       - 문서 없지만 부트캠프 관련: 담당자 문의 안내
-       - 부트캠프와 무관: 관련 질문 유도
-    """
     encrypted_name = encrypt(request.user_name) if request.user_name else None
     get_or_create_session(db, request.session_id, encrypted_name)
-
     save_message(db, request.session_id, "user", request.message, source="user")
 
-    # ── Step 0: 가드레일 검사 ────────────────────────────
+    retrieval_chunks: list[str] = []
+    source = "fallback"
+    answer = get_prompt_value("fallback_prompt")
+    llm_cost = 0.0
+    error_message = None
+    processing_status = "ready"
+
     blocked = guardrail_check(request.message)
     if blocked:
-        save_message(db, request.session_id, "assistant", blocked, source="guardrail")
-        return ChatResponse(answer=blocked, source="guardrail", session_id=request.session_id)
+        answer = blocked
+        source = "guardrail"
+    elif is_cancel_request(request.message):
+        answer = get_prompt_value("cancel_prompt")
+        source = "handoff"
+        processing_status = "handoff"
+        db.add(CancelRequest(session_id=request.session_id, message=request.message, status="requested"))
+        db.commit()
+    elif is_handoff_request(request.message):
+        answer = get_prompt_value("handoff_prompt")
+        source = "handoff"
+        processing_status = "handoff"
+    else:
+        faq_answer = search_faq(request.message) if is_guide_query(request.message) else None
+        if faq_answer:
+            answer = faq_answer
+            source = "faq"
+        else:
+            result = search_documents(request.message)
+            retrieval_chunks = result.chunks
+            try:
+                answer, llm_cost = await get_ai_response(request.message, result.context)
+                source = "document" if result.context else "ai"
+            except Exception as exc:
+                answer = get_prompt_value("fallback_prompt")
+                source = "fallback"
+                processing_status = "failed"
+                error_message = str(exc)
 
-    if is_handoff_request(request.message):
-        save_message(db, request.session_id, "assistant", HANDOFF_MESSAGE, source="handoff")
-        return ChatResponse(
-            answer=HANDOFF_MESSAGE,
-            source="handoff",
+    save_message(db, request.session_id, "assistant", answer, source=source)
+    db.add(
+        ChatLog(
             session_id=request.session_id,
+            question=request.message,
+            retrieval_chunks=json.dumps(retrieval_chunks, ensure_ascii=False),
+            answer=answer,
+            source=source,
+            error=error_message,
+            processing_status=processing_status,
+            embedding_cost=0.0,
+            llm_cost=llm_cost,
         )
+    )
+    db.commit()
 
-    # ── Step 1: 가이드형 질문만 FAQ 우선 검색 ─────────────
-    faq_answer = search_faq(request.message) if is_guide_query(request.message) else None
-    if faq_answer:
-        save_message(db, request.session_id, "assistant", faq_answer, source="faq")
-        return ChatResponse(
-            answer=faq_answer,
-            source="faq",
-            session_id=request.session_id,
-        )
-
-    # ── Step 2: 하이브리드 문서 검색 ─────────────────────
-    context = search_documents(request.message)
-
-    # ── Step 3: OpenAI API 호출 ──────────────────────────
-    try:
-        ai_answer = await get_ai_response(request.message, context)
-        source = "document" if context else "ai"
-    except Exception:
-        ai_answer = ERROR_FALLBACK
-        source = "fallback"
-
-    save_message(db, request.session_id, "assistant", ai_answer, source=source)
     return ChatResponse(
-        answer=ai_answer,
+        answer=answer,
         source=source,
         session_id=request.session_id,
+        handoff_url=get_settings().channel_talk_url or None,
     )
 
 
 @router.get("/suggested", response_model=SuggestedQuestionsResponse)
-def get_suggested(db: Session = Depends(get_db)):
-    """추천 질문 버튼 목록 반환"""
-    questions = get_suggested_questions()
-    return SuggestedQuestionsResponse(questions=questions)
+def get_suggested():
+    return SuggestedQuestionsResponse(questions=get_suggested_questions())

@@ -72,6 +72,7 @@ export const useChat = () => {
           role: 'assistant',
           content: response.answer,
           source: response.source,
+          handoff_url: response.handoff_url ?? null,
           timestamp: new Date().toISOString(),
         };
 

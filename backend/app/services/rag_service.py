@@ -8,92 +8,30 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import Language, RecursiveCharacterTextSplitter
+from sqlalchemy.orm import Session
+
+from app.config import get_settings
+from app.db.database import SessionLocal
+from app.db.models import ChunkRecord, DocumentRecord, FaqRecord
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
-DOCS_DIR = ROOT / "data" / "docs"
 FAISS_DIR = ROOT / "data" / "faiss_index"
-DOC_CATALOG_PATH = DOCS_DIR / "catalog.json"
 STOPWORDS = {
     "과정",
     "관련",
     "문의",
     "무엇",
-    "뭐",
     "설명",
     "안내",
     "정보",
-    "내용",
+    "이용",
     "어떤",
-    "어떻게",
     "얼마",
-    "가능",
-    "가요",
-    "인가요",
-    "있나요",
-    "주세요",
-    "해줘",
-    "정도",
 }
 
 
-def _load_doc_catalog() -> list[dict]:
-    if not DOC_CATALOG_PATH.exists():
-        return []
-    return json.loads(DOC_CATALOG_PATH.read_text(encoding="utf-8")).get("documents", [])
-
-
-def _load_raw_docs() -> list[tuple[str, dict]]:
-    if not DOCS_DIR.exists():
-        return []
-
-    catalog = _load_doc_catalog()
-    if catalog:
-        entries = [
-            (
-                DOCS_DIR / item["path"],
-                {
-                    "file": Path(item["path"]).stem,
-                    "category": item["category"],
-                    "title": item["title"],
-                },
-            )
-            for item in catalog
-        ]
-    else:
-        entries = [(md_file, {"file": md_file.stem}) for md_file in sorted(DOCS_DIR.glob("*.md"))]
-
-    return [
-        (md_file.read_text(encoding="utf-8"), metadata)
-        for md_file, metadata in entries
-        if md_file.exists()
-    ]
-
-
-def _filter_content(content: str) -> str:
-    sections = re.split(r"\n(?=## )", content)
-    excluded_titles = (
-        "참고 질문 추출",
-        "원문 기반 상세 내용",
-    )
-    filtered = [section for section in sections if not any(title in section for title in excluded_titles)]
-    return "\n".join(filtered)
-
-
-def _decorate_chunk(text: str, metadata: dict) -> str:
-    title = metadata.get("title", metadata.get("file", ""))
-    category = metadata.get("category", "")
-    header = []
-    if title:
-        header.append(f"문서: {title}")
-    if category:
-        header.append(f"카테고리: {category}")
-    if not header:
-        return text.strip()
-    return "\n".join(header) + "\n\n" + text.strip()
-
-
 def _normalize_text(text: str) -> str:
-    lowered = text.lower()
+    lowered = (text or "").lower()
     cleaned = re.sub(r"[^0-9a-zA-Z가-힣\s]", " ", lowered)
     return re.sub(r"\s+", " ", cleaned).strip()
 
@@ -119,17 +57,21 @@ def _cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
 class RAGService:
     def __init__(self, api_key: str):
         FAISS_DIR.mkdir(parents=True, exist_ok=True)
+        settings = get_settings()
         self._embeddings = OpenAIEmbeddings(
-            model="text-embedding-3-small",
+            model=settings.embedding_model,
             api_key=api_key,
-        )
+        ) if api_key else None
         self._splitter = RecursiveCharacterTextSplitter.from_language(
             language=Language.MARKDOWN,
             chunk_size=1200,
             chunk_overlap=150,
         )
+        self._vectorstore = None
+        self._documents: list[Document] = []
+        self._keyword_index: list[tuple[Document, set[str], str]] = []
         faiss_path = FAISS_DIR / "index.faiss"
-        if faiss_path.exists():
+        if self._embeddings and faiss_path.exists():
             self._vectorstore = FAISS.load_local(
                 str(FAISS_DIR),
                 self._embeddings,
@@ -137,10 +79,23 @@ class RAGService:
             )
             self._documents = self._load_documents_from_vectorstore()
             self._keyword_index = self._build_keyword_index(self._documents)
-        else:
-            self._vectorstore = None
-            self._documents = []
-            self._keyword_index = []
+
+    def build_chunks_for_markdown(self, content: str, metadata: dict) -> list[Document]:
+        chunks = self._splitter.create_documents([content], metadatas=[metadata])
+        documents: list[Document] = []
+        for chunk in chunks:
+            if len(chunk.page_content.strip()) < 50:
+                continue
+            title = metadata.get("title", metadata.get("file", ""))
+            source_type = metadata.get("source_type", "document")
+            header_lines = [f"source_type: {source_type}"]
+            if title:
+                header_lines.append(f"title: {title}")
+            if metadata.get("category"):
+                header_lines.append(f"category: {metadata['category']}")
+            chunk.page_content = "\n".join(header_lines) + "\n\n" + chunk.page_content.strip()
+            documents.append(chunk)
+        return documents
 
     def _load_documents_from_vectorstore(self) -> list[Document]:
         if self._vectorstore is None:
@@ -151,9 +106,7 @@ class RAGService:
     def _build_keyword_index(self, documents: list[Document]) -> list[tuple[Document, set[str], str]]:
         index = []
         for doc in documents:
-            metadata_text = " ".join(
-                str(doc.metadata.get(key, "")) for key in ("title", "category", "file")
-            )
+            metadata_text = " ".join(str(doc.metadata.get(key, "")) for key in ("title", "category", "file"))
             combined_text = f"{metadata_text} {doc.page_content}".strip()
             tokens = set(_tokenize(combined_text))
             index.append((doc, tokens, _normalize_text(combined_text)))
@@ -218,10 +171,8 @@ class RAGService:
             phrase_bonus = 0.0
             if compact_query and compact_query in normalized_content.replace(" ", ""):
                 phrase_bonus += 3.0
-
             if overlap == 0 and phrase_bonus == 0:
                 continue
-
             score = overlap * 2.0 + phrase_bonus
             scored.append((score, doc))
 
@@ -245,13 +196,11 @@ class RAGService:
     def _rerank_documents(self, query: str, docs: list[Document], top_k: int) -> list[Document]:
         if not docs:
             return []
-
         query_tokens = set(_tokenize(query))
         compact_query = _compact_text(query)
-        query_embedding = self._embeddings.embed_query(query)
-
+        query_embedding = self._embeddings.embed_query(query) if self._embeddings else None
         doc_texts = [doc.page_content for doc in docs]
-        doc_embeddings = self._embeddings.embed_documents(doc_texts)
+        doc_embeddings = self._embeddings.embed_documents(doc_texts) if self._embeddings else [[] for _ in docs]
 
         scored_docs: list[tuple[float, Document]] = []
         for doc, doc_embedding in zip(docs, doc_embeddings):
@@ -263,69 +212,100 @@ class RAGService:
             category = str(doc.metadata.get("category", ""))
             header_text = f"{title} {category} {doc.metadata.get('file', '')}"
 
-            score = _cosine_similarity(query_embedding, doc_embedding) * 5.0
+            score = _cosine_similarity(query_embedding, doc_embedding) * 5.0 if query_embedding else 0.0
             score += len(query_tokens & content_tokens) * 1.8
-
             if compact_query and compact_query in compact_content:
                 score += 3.0
-
             if any(token in header_text.lower() for token in _normalize_text(query).split()):
                 score += 1.2
-
-            if "실제 응답 기준" in content:
-                score += 2.5
-            if "한눈에 보기" in content or "| 항목 |" in content:
-                score += 1.0
-            if "##" not in content and any(char.isdigit() for char in query):
-                score += 0.5
-            if any(signal in query for signal in ["얼마", "기간", "몇", "언제", "비용", "교육비"]) and any(
-                ch.isdigit() for ch in content
-            ):
-                score += 1.2
-            if any(signal in query for signal in ["차이", "비교", "모두", "같아", "같나요"]):
-                if any(token in content for token in ["모두", "같", "차이", "비교"]):
-                    score += 1.0
-            if any(signal in query for signal in ["어떤 사람", "추천", "맞아", "맞나요"]):
-                if any(token in content for token in ["추천 대상", "잘 맞", "어떤 사람"]):
-                    score += 1.0
-
             scored_docs.append((score, doc))
 
         scored_docs.sort(key=lambda item: item[0], reverse=True)
         reranked = [doc for _, doc in scored_docs]
         return self._unique_documents(reranked, top_k)
 
-    def index_all(self) -> None:
-        raw_docs = _load_raw_docs()
-        if not raw_docs:
+    def index_all(self, db: Session | None = None) -> None:
+        if not self._embeddings:
+            self._vectorstore = None
+            self._documents = []
+            self._keyword_index = []
             return
 
-        documents = []
-        for content, metadata in raw_docs:
-            filtered = _filter_content(content)
-            chunks = self._splitter.create_documents([filtered], metadatas=[metadata])
-            for chunk in chunks:
-                if len(chunk.page_content) >= 50:
-                    chunk.page_content = _decorate_chunk(chunk.page_content, metadata)
-                    documents.append(chunk)
+        owns_session = db is None
+        db = db or SessionLocal()
+        try:
+            documents: list[Document] = []
+            active_docs = (
+                db.query(DocumentRecord)
+                .filter(DocumentRecord.is_active.is_(True), DocumentRecord.status == "ready")
+                .order_by(DocumentRecord.created_at.asc())
+                .all()
+            )
+            for item in active_docs:
+                if not item.md_path:
+                    continue
+                md_path = Path(item.md_path)
+                if not md_path.exists():
+                    continue
+                content = md_path.read_text(encoding="utf-8")
+                metadata = {
+                    "file": item.logical_name,
+                    "title": item.original_filename,
+                    "category": "document",
+                    "document_id": item.id,
+                    "source_type": "document",
+                }
+                documents.extend(self.build_chunks_for_markdown(content, metadata))
 
-        self._vectorstore = FAISS.from_documents(documents, self._embeddings)
-        self._documents = documents
-        self._keyword_index = self._build_keyword_index(documents)
-        self._vectorstore.save_local(str(FAISS_DIR))
+            active_faqs = db.query(FaqRecord).filter(FaqRecord.is_active.is_(True)).order_by(FaqRecord.id.asc()).all()
+            for faq in active_faqs:
+                faq_text = f"FAQ 질문: {faq.question}\nFAQ 답변: {faq.answer}"
+                metadata = {
+                    "file": f"faq::{faq.faq_key}",
+                    "title": faq.question,
+                    "category": faq.category,
+                    "source_type": "faq",
+                }
+                documents.extend(self.build_chunks_for_markdown(faq_text, metadata))
 
-    def search(
+            if not documents:
+                self._vectorstore = None
+                self._documents = []
+                self._keyword_index = []
+                return
+
+            self._vectorstore = FAISS.from_documents(documents, self._embeddings)
+            self._documents = documents
+            self._keyword_index = self._build_keyword_index(documents)
+            self._vectorstore.save_local(str(FAISS_DIR))
+        finally:
+            if owns_session:
+                db.close()
+
+    def replace_document_chunks(self, db: Session, document_id: int, chunks: list[Document]) -> None:
+        db.query(ChunkRecord).filter(ChunkRecord.document_id == document_id).delete()
+        for index, chunk in enumerate(chunks):
+            db.add(
+                ChunkRecord(
+                    document_id=document_id,
+                    chunk_index=index,
+                    content=chunk.page_content,
+                    metadata_json=json.dumps(chunk.metadata, ensure_ascii=False),
+                )
+            )
+        db.commit()
+
+    def search_documents(
         self,
         query: str,
         top_k: int = 4,
         strategy: str = "hybrid",
         files: list[str] | None = None,
-    ) -> str:
-        if self._vectorstore is None:
-            return ""
+    ) -> list[Document]:
+        if self._vectorstore is None and not self._keyword_index:
+            return []
 
         file_filter = set(files or [])
-
         if strategy == "semantic":
             candidates = self._vector_search(query, top_k, file_filter)
         elif strategy == "keyword":
@@ -337,8 +317,10 @@ class RAGService:
             keyword_docs = self._keyword_search(query, top_k, file_filter)
             mmr_docs = self._mmr_search(query, top_k, file_filter)
             candidates = self._fuse_ranked_lists([keyword_docs, vector_docs, mmr_docs], top_k)
+        return self._rerank_documents(query, candidates, top_k)
 
-        docs = self._rerank_documents(query, candidates, top_k)
+    def search(self, query: str, top_k: int = 4, strategy: str = "hybrid", files: list[str] | None = None) -> str:
+        docs = self.search_documents(query=query, top_k=top_k, strategy=strategy, files=files)
         return "\n\n---\n\n".join(doc.page_content for doc in docs) if docs else ""
 
 
@@ -348,7 +330,5 @@ _instance: Optional[RAGService] = None
 def get_rag_service() -> RAGService:
     global _instance
     if _instance is None:
-        from app.config import get_settings
-
         _instance = RAGService(get_settings().openai_api_key)
     return _instance

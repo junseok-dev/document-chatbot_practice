@@ -12,6 +12,7 @@ class ChatResponse(BaseModel):
     answer: str
     source: Literal["faq", "document", "ai", "fallback", "guardrail", "handoff"]
     session_id: str
+    handoff_url: Optional[str] = None
 
 
 class SuggestedQuestion(BaseModel):
