@@ -62,26 +62,38 @@ def _serialize_faq(record: FaqRecord) -> dict:
 
 
 def seed_faqs(db: Session) -> None:
-    if db.query(FaqRecord).first():
-        return
-
     payload = _load_faq_json()
     for faq in payload.get("faqs", []):
-        db.add(
-            FaqRecord(
-                faq_key=faq.get("id"),
-                category=faq.get("category", ""),
-                question=faq.get("question", ""),
-                answer=faq.get("answer", ""),
-                keywords_json=json.dumps(faq.get("keywords", []), ensure_ascii=False),
-                aliases_json=json.dumps(faq.get("aliases", []), ensure_ascii=False),
-                search_hints_json=json.dumps(faq.get("search_hints", []), ensure_ascii=False),
-                source_files_json=json.dumps(faq.get("source_files", []), ensure_ascii=False),
-                direct_answer=bool(faq.get("direct_answer", False)),
-                top_k=int(faq.get("top_k", 4) or 4),
-                is_active=True,
+        faq_key = faq.get("id")
+        if not faq_key:
+            continue
+        existing = db.query(FaqRecord).filter(FaqRecord.faq_key == faq_key).first()
+        if existing:
+            existing.category = faq.get("category", "")
+            existing.question = faq.get("question", "")
+            existing.answer = faq.get("answer", "")
+            existing.keywords_json = json.dumps(faq.get("keywords", []), ensure_ascii=False)
+            existing.aliases_json = json.dumps(faq.get("aliases", []), ensure_ascii=False)
+            existing.search_hints_json = json.dumps(faq.get("search_hints", []), ensure_ascii=False)
+            existing.source_files_json = json.dumps(faq.get("source_files", []), ensure_ascii=False)
+            existing.direct_answer = bool(faq.get("direct_answer", False))
+            existing.top_k = int(faq.get("top_k", 4) or 4)
+        else:
+            db.add(
+                FaqRecord(
+                    faq_key=faq_key,
+                    category=faq.get("category", ""),
+                    question=faq.get("question", ""),
+                    answer=faq.get("answer", ""),
+                    keywords_json=json.dumps(faq.get("keywords", []), ensure_ascii=False),
+                    aliases_json=json.dumps(faq.get("aliases", []), ensure_ascii=False),
+                    search_hints_json=json.dumps(faq.get("search_hints", []), ensure_ascii=False),
+                    source_files_json=json.dumps(faq.get("source_files", []), ensure_ascii=False),
+                    direct_answer=bool(faq.get("direct_answer", False)),
+                    top_k=int(faq.get("top_k", 4) or 4),
+                    is_active=True,
+                )
             )
-        )
     db.commit()
 
 
