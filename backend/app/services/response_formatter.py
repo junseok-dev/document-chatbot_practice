@@ -19,6 +19,16 @@ _SOFT_BREAK_MARKERS = (
 
 def _clean_text(text: str) -> str:
     cleaned = re.sub(r"[*_`>#-]+", " ", text or "")
+    cleaned = re.sub(
+        r"^\s*(\uc88b\uc544\uc694|\ub124|\uc54c\uaca0\uc2b5\ub2c8\ub2e4|\ud655\uc778\ud588\uc2b5\ub2c8\ub2e4)\s*[-\u2013\u2014:]\s*",
+        r"\1. ",
+        cleaned,
+    )
+    cleaned = re.sub(
+        r"^\s*\uc815\ubcf4\s*\uc815\ub9ac\s*(\ud574\s*\ub4dc\ub9b4\uac8c\uc694)?[.:]?\s*",
+        "",
+        cleaned,
+    )
     cleaned = re.sub(r"\s+", " ", cleaned)
     return cleaned.strip()
 

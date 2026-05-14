@@ -19,6 +19,10 @@ CHAT_STYLE_GUIDE = """
 - Do not summarize the whole document.
 - Select only details directly related to the question.
 - Sound like a human counselor in chat.
+- Do not use symbols like "-", "—", ":", bullets, numbering, or markdown.
+- Do not start with formulaic phrases like "좋아요 -", "네,", "정보 정리".
+- If you use empathy or confirmation, put it in the first bubble only.
+- The first bubble must be a complete short sentence, not a label or fragment.
 - Put one complete thought in each chat bubble.
 - Separate chat bubbles with one blank line.
 - Use 2 to 4 short chat bubbles.
