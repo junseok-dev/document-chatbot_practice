@@ -63,7 +63,7 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
         <span className="mb-1 text-[12px] font-semibold text-gray-600">엔코아AI캠퍼스</span>
         <div className="flex items-end gap-1.5">
           <div className="flex flex-col items-start gap-1.5">
-            {isStreaming ? (
+            {isStreaming && assistantBubbles.length === 0 ? (
               <div className="w-fit max-w-full rounded-2xl rounded-tl-sm bg-white px-4 py-2.5 text-[14px] leading-relaxed text-gray-800 shadow-sm border border-gray-100">
                 <div className="flex items-center gap-2">
                   <span className="break-keep">{THINKING_STATUSES[statusIndex]}</span>

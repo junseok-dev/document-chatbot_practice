@@ -1,5 +1,4 @@
 import asyncio
-import re
 from typing import AsyncGenerator
 
 from openai import AsyncOpenAI
@@ -12,61 +11,32 @@ settings = get_settings()
 client = AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
 MAX_COMPLETION_TOKENS = 4096
 BUBBLE_PAUSE_SECONDS = 1.0
-MAX_STREAM_BUBBLES = 3
 TYPE_DELAY_SECONDS = 0.015
-_SENTENCE_END = re.compile(r"(.+?[.!?\u3002\uff01\uff1f])(\s+|$)")
 
 CHAT_STYLE_GUIDE = """
-[Counselor chat style]
-- Answer in Korean.
-- Understand the user's intent first.
-- Identify the single core question being asked.
-- Do not summarize the whole document.
-- Select only details directly related to the question.
-- Answer only what the user asked right now.
-- Do not try to cover every related topic in one answer.
-- Conversation is for gradually discovering information.
-- Give the smallest helpful answer that is still clear.
-- If more detail may help, invite the next question briefly.
-- Sound like a human counselor in chat.
-- Do not use bullets, numbering, tables, headings, or decorative symbols.
-- Never use dash separators such as "-" or "—"; use a normal sentence instead.
-- You may use **bold** only for one or two important course names or keywords.
-- Do not start with formulaic phrases like "좋아요 -", "네,", "정보 정리".
-- If you use empathy or confirmation, put it in the first bubble only.
-- The first bubble must be a complete short sentence, not a label or fragment.
-- Put one complete thought in each chat bubble.
-- Separate chat bubbles with one blank line.
-- Use 1 to 3 short chat bubbles.
-- Each bubble should be under 45 Korean characters when possible.
-- Do not split words or sentences awkwardly.
-- Prefer complete sentences in each bubble.
-- Start with the core answer.
-- Save extra details for follow-up questions.
-- Avoid long lists, headings, source labels, and document-summary tone.
-- Do not mention duration, hours, exact step names, or tool stacks unless the user asks.
-- For course explanations, answer the exact angle asked.
-- If the user asks generally, give only the plain meaning and who it fits.
-- Do not compare other courses unless the user asks.
-- Rewrite the retrieved document in your own easy words.
-- Assume the user is deciding whether the course fits them.
-- Use everyday words before technical terms.
-- If a technical term is necessary, explain it briefly in the same sentence.
-- Do not copy document phrases such as "service-level workflow", "technology stack", or "learning flow".
-- Do not say "I'll summarize everything" or "I'll organize all information".
-- Do not say "according to the document" or "reference document".
-
-[Example for broad course questions]
-User: ai 과정에 대해서 설명해줘
-Assistant:
-AI 과정은 목표별로 달라요.
-
-AI 오케스트레이션은 여러 AI를 묶어 업무 흐름을 만드는 과정이에요.
-
-서비스 기획이나 자동화에 관심 있으면 잘 맞아요.
+[상담사 답변 방식]
+- 반드시 한국어로 답변합니다.
+- 사용자의 질문에서 핵심 의도를 먼저 파악합니다.
+- 한 번에 모든 정보를 설명하지 않습니다.
+- 사용자가 지금 물어본 내용에 직접 관련된 정보만 답합니다.
+- 문서를 그대로 읽어주지 말고, 쉬운 말로 다시 정리합니다.
+- 친절한 상담사가 채팅하는 말투로 답합니다.
+- 답변은 1개에서 3개의 짧은 말풍선으로 나눕니다.
+- 말풍선 사이는 빈 줄 하나로 구분합니다.
+- 각 말풍선은 하나의 자연스러운 생각이나 문장 단위로 끝냅니다.
+- 문장이나 단어를 어색하게 자르지 않습니다.
+- 첫 말풍선에는 공감이나 확인을 짧게 담을 수 있습니다.
+- 불릿, 번호, 표, 제목, 장식 기호를 쓰지 않습니다.
+- 하이픈이나 긴 대시로 말을 잇지 않습니다.
+- 강조가 꼭 필요할 때만 **굵게** 표시를 사용합니다.
+- "정보 정리해 드립니다", "문서 기준", "전체를 요약하면" 같은 표현은 쓰지 않습니다.
+- 과정 설명은 사용자가 물어본 관점에 맞춰 짧게 답합니다.
+- 기간, 시간, 단계명, 기술 스택은 사용자가 직접 물어본 경우에만 말합니다.
+- 정확한 수치가 문서에 없으면 추측하지 말고 확인이 필요하다고 말합니다.
+- 답변 마지막에는 다음 질문을 자연스럽게 유도할 수 있습니다.
 """
 
-STANDARD_REFUSAL = "참고 문서에서 확인되지 않습니다. 정확한 안내는 관리자 확인이 필요합니다."
+STANDARD_REFUSAL = "확인된 자료만으로는 정확히 안내드리기 어려워요. 필요하시면 담당자가 확인할 수 있게 도와드릴게요."
 
 
 def _normalize_response(answer: str) -> str:
@@ -75,12 +45,27 @@ def _normalize_response(answer: str) -> str:
 
 
 def _build_messages(system_prompt: str, user_message: str, history: list[dict]) -> list[dict]:
-    """system + 이전 대화 이력 + 현재 질문으로 메시지 배열 구성."""
     msgs: list[dict] = [{"role": "system", "content": system_prompt}]
-    for h in history:
-        msgs.append({"role": h["role"], "content": h["content"]})
+    for item in history:
+        msgs.append({"role": item["role"], "content": item["content"]})
     msgs.append({"role": "user", "content": user_message})
     return msgs
+
+
+def _build_user_message(question: str, context: str) -> str:
+    if not context:
+        return f"[사용자 질문]\n{question}"
+
+    return (
+        "[상담 참고 자료]\n"
+        f"{context}\n\n"
+        "[답변 지침]\n"
+        "사용자 질문의 핵심 의도에 직접 관련된 내용만 고르세요.\n"
+        "참고 자료 전체를 나열하거나 요약하지 마세요.\n"
+        "사용자가 물어본 범위를 벗어나는 정보는 다음 질문에서 안내하세요.\n\n"
+        "[사용자 질문]\n"
+        f"{question}"
+    )
 
 
 async def get_ai_response(question: str, context: str, history: list[dict] | None = None) -> tuple[str, float]:
@@ -88,16 +73,7 @@ async def get_ai_response(question: str, context: str, history: list[dict] | Non
         return format_chat_response(STANDARD_REFUSAL), 0.0
 
     system_prompt = f"{get_prompt_value('counseling_prompt')}\n\n{CHAT_STYLE_GUIDE}"
-    user_message = (
-        "[상담 참고 정보]\n"
-        f"{context}\n\n"
-        "[답변 기준]\n"
-        "사용자 질문의 핵심 맥락과 직접 관련된 정보만 골라 답하세요.\n"
-        "참고 정보 전체를 나열하거나 요약하지 마세요.\n\n"
-        "[사용자 질문]\n"
-        f"{question}"
-    ) if context else f"[사용자 질문]\n{question}"
-    messages = _build_messages(system_prompt, user_message, history or [])
+    messages = _build_messages(system_prompt, _build_user_message(question, context), history or [])
 
     response = await client.chat.completions.create(
         model=settings.model_name,
@@ -112,67 +88,24 @@ async def get_ai_response(question: str, context: str, history: list[dict] | Non
     return _normalize_response(content), estimated_cost
 
 
+async def _yield_chat_text(text: str) -> AsyncGenerator[str, None]:
+    bubbles = [part for part in text.split("\n\n") if part.strip()]
+    for index, bubble in enumerate(bubbles):
+        if index > 0:
+            yield "\n\n"
+            await asyncio.sleep(BUBBLE_PAUSE_SECONDS)
+
+        for char in bubble:
+            yield char
+            await asyncio.sleep(TYPE_DELAY_SECONDS)
+
+
 async def get_ai_response_stream(question: str, context: str, history: list[dict] | None = None) -> AsyncGenerator[str, None]:
-    """OpenAI 스트리밍 API를 사용해 텍스트 토큰을 순차적으로 yield."""
     if client is None:
-        yield format_chat_response(STANDARD_REFUSAL)
+        async for token in _yield_chat_text(format_chat_response(STANDARD_REFUSAL)):
+            yield token
         return
 
-    system_prompt = f"{get_prompt_value('counseling_prompt')}\n\n{CHAT_STYLE_GUIDE}"
-    user_message = (
-        "[상담 참고 정보]\n"
-        f"{context}\n\n"
-        "[답변 기준]\n"
-        "사용자 질문의 핵심 맥락과 직접 관련된 정보만 골라 답하세요.\n"
-        "참고 정보 전체를 나열하거나 요약하지 마세요.\n\n"
-        "[사용자 질문]\n"
-        f"{question}"
-    ) if context else f"[사용자 질문]\n{question}"
-    messages = _build_messages(system_prompt, user_message, history or [])
-
-    stream = await client.chat.completions.create(
-        model=settings.model_name,
-        messages=messages,
-        max_completion_tokens=MAX_COMPLETION_TOKENS,
-        stream=True,
-    )
-
-    buffer = ""
-    sent_bubbles = 0
-    async for chunk in stream:
-        if not chunk.choices or not chunk.choices[0].delta.content:
-            continue
-
-        buffer += chunk.choices[0].delta.content
-        while sent_bubbles < MAX_STREAM_BUBBLES:
-            match = _SENTENCE_END.match(buffer)
-            if not match:
-                break
-
-            sentence = match.group(1).strip()
-            buffer = buffer[match.end():]
-            bubble = format_chat_response(sentence, max_bubbles=1).strip()
-            if not bubble:
-                continue
-
-            if sent_bubbles > 0:
-                yield "\n\n"
-                await asyncio.sleep(BUBBLE_PAUSE_SECONDS)
-
-            for char in bubble:
-                yield char
-                await asyncio.sleep(TYPE_DELAY_SECONDS)
-            sent_bubbles += 1
-
-        if sent_bubbles >= MAX_STREAM_BUBBLES:
-            break
-
-    if buffer.strip() and sent_bubbles < MAX_STREAM_BUBBLES:
-        bubble = format_chat_response(buffer, max_bubbles=1).strip()
-        if bubble:
-            if sent_bubbles > 0:
-                yield "\n\n"
-                await asyncio.sleep(BUBBLE_PAUSE_SECONDS)
-            for char in bubble:
-                yield char
-                await asyncio.sleep(TYPE_DELAY_SECONDS)
+    answer, _ = await get_ai_response(question, context, history)
+    async for token in _yield_chat_text(answer):
+        yield token
