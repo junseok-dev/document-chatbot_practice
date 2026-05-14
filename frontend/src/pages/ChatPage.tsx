@@ -16,7 +16,7 @@ const ChatPage: React.FC = () => {
         <div className="max-w-4xl mx-auto w-full h-16 flex items-center justify-between px-4">
           <div className="flex items-center gap-4">
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate(-1)}
               className="p-2 -ml-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500"
               aria-label="홈으로 돌아가기"
             >
