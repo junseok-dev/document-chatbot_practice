@@ -1,20 +1,9 @@
 import re
 
 MAX_BUBBLES = 3
-MAX_BUBBLE_CHARS = 72
+MAX_BUBBLE_CHARS = 120
 
 _SENTENCE_END = re.compile(r"(?<=[.!?\u3002\uff01\uff1f])\s+")
-_SOFT_BREAK_MARKERS = (
-    "\uc774\uace0",
-    "\uc774\uba70",
-    "\uc778\ub370",
-    "\uc9c0\ub9cc",
-    "\ub77c\uc11c",
-    "\ud574\uc11c",
-    "\ub2c8\uae4c",
-    "\uace0",
-    "\uba70",
-)
 
 
 def _clean_paragraph(text: str) -> str:
@@ -42,40 +31,6 @@ def _clean_paragraph(text: str) -> str:
 def _split_sentences(text: str) -> list[str]:
     sentences = [part.strip() for part in _SENTENCE_END.split(text) if part.strip()]
     return sentences or ([text] if text else [])
-
-
-def _split_long_sentence(sentence: str) -> list[str]:
-    if len(sentence) <= MAX_BUBBLE_CHARS:
-        return [sentence]
-
-    parts: list[str] = []
-    remaining = sentence.strip()
-    while len(remaining) > MAX_BUBBLE_CHARS:
-        window = remaining[:MAX_BUBBLE_CHARS]
-        break_at = -1
-
-        for marker in _SOFT_BREAK_MARKERS:
-            idx = window.rfind(marker)
-            if idx >= 20:
-                break_at = idx + len(marker)
-                break
-
-        if break_at < 0:
-            for mark in (",", "\uff0c", ":", ";", " "):
-                idx = window.rfind(mark)
-                if idx >= 20:
-                    break_at = idx + 1
-                    break
-
-        if break_at < 0:
-            break_at = MAX_BUBBLE_CHARS
-
-        parts.append(remaining[:break_at].strip(" ,"))
-        remaining = remaining[break_at:].strip(" ,")
-
-    if remaining:
-        parts.append(remaining)
-    return parts
 
 
 def _pack_bubbles(parts: list[str], max_bubbles: int) -> list[str]:
@@ -108,18 +63,17 @@ def _pack_bubbles(parts: list[str], max_bubbles: int) -> list[str]:
 
 
 def format_chat_response(text: str, max_bubbles: int = MAX_BUBBLES) -> str:
-    paragraphs = [
-        _clean_paragraph(part)
-        for part in re.split(r"\n{2,}", text or "")
-        if _clean_paragraph(part)
-    ]
+    paragraphs = []
+    for part in re.split(r"\n{2,}", text or ""):
+        cleaned = _clean_paragraph(part)
+        if cleaned:
+            paragraphs.append(cleaned)
     if not paragraphs:
         return ""
 
     parts: list[str] = []
     for paragraph in paragraphs:
-        for sentence in _split_sentences(paragraph):
-            parts.extend(_split_long_sentence(sentence))
+        parts.extend(_split_sentences(paragraph))
 
     bubbles = _pack_bubbles(parts, max_bubbles)
     return "\n\n".join(bubbles)
