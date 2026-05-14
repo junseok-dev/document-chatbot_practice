@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Playdata Chatbot API",
+    title="엔코아AI캠퍼스 상담 챗봇 API",
     description="FAQ와 문서 기반 교육 상담 API",
     version="2.0.0",
     lifespan=lifespan,
@@ -42,8 +42,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "https://playdata.io",
-        "https://www.playdata.io",
+        "http://chatbot.encorecampus.ai.playdata.io",
+        "https://chatbot.encorecampus.ai.playdata.io",
     ],
     allow_credentials=True,
     allow_methods=["*"],
