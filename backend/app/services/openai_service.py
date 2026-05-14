@@ -1,4 +1,5 @@
 import asyncio
+import re
 from typing import AsyncGenerator
 
 from openai import AsyncOpenAI
@@ -11,6 +12,9 @@ settings = get_settings()
 client = AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
 MAX_COMPLETION_TOKENS = 4096
 BUBBLE_PAUSE_SECONDS = 2.0
+MAX_STREAM_BUBBLES = 3
+TYPE_DELAY_SECONDS = 0.015
+_SENTENCE_END = re.compile(r"(.+?[.!?\u3002\uff01\uff1f])(\s+|$)")
 
 CHAT_STYLE_GUIDE = """
 [Counselor chat style]
@@ -26,11 +30,14 @@ CHAT_STYLE_GUIDE = """
 - Put one complete thought in each chat bubble.
 - Separate chat bubbles with one blank line.
 - Use 2 to 4 short chat bubbles.
+- Each bubble should be under 45 Korean characters when possible.
 - Do not split words or sentences awkwardly.
 - Prefer complete sentences in each bubble.
 - Start with the core answer.
 - Leave extra details for follow-up questions.
 - Avoid long lists, headings, source labels, and document-summary tone.
+- Do not mention duration, hours, exact step names, or tool stacks unless the user asks.
+- For course explanations, explain who it fits and what it is for, not the curriculum list.
 - Do not say "I'll summarize everything" or "I'll organize all information".
 - Do not say "according to the document" or "reference document".
 
@@ -39,11 +46,9 @@ User: ai 과정에 대해서 설명해줘
 Assistant:
 AI 과정은 목표별로 달라요.
 
-자동화와 서비스 기획이면 AI 오케스트레이션이 맞고,
+AI 오케스트레이션은 여러 AI를 묶어 업무 흐름을 만드는 과정이에요.
 
-RAG나 검색 정확도 쪽이면 머신러닝 엔지니어가 맞아요.
-
-운영과 배포 자동화가 좋다면 MLOps 쪽이에요.
+서비스 기획이나 자동화에 관심 있으면 잘 맞아요.
 """
 
 STANDARD_REFUSAL = "참고 문서에서 확인되지 않습니다. 정확한 안내는 관리자 확인이 필요합니다."
@@ -118,17 +123,41 @@ async def get_ai_response_stream(question: str, context: str, history: list[dict
     )
 
     buffer = ""
+    sent_bubbles = 0
     async for chunk in stream:
         if not chunk.choices or not chunk.choices[0].delta.content:
             continue
 
         buffer += chunk.choices[0].delta.content
-        while "\n\n" in buffer:
-            bubble, buffer = buffer.split("\n\n", 1)
-            if bubble:
-                yield bubble
-            yield "\n\n"
-            await asyncio.sleep(BUBBLE_PAUSE_SECONDS)
+        while sent_bubbles < MAX_STREAM_BUBBLES:
+            match = _SENTENCE_END.match(buffer)
+            if not match:
+                break
 
-    if buffer.strip():
-        yield buffer
+            sentence = match.group(1).strip()
+            buffer = buffer[match.end():]
+            bubble = format_chat_response(sentence, max_bubbles=1).strip()
+            if not bubble:
+                continue
+
+            if sent_bubbles > 0:
+                yield "\n\n"
+                await asyncio.sleep(BUBBLE_PAUSE_SECONDS)
+
+            for char in bubble:
+                yield char
+                await asyncio.sleep(TYPE_DELAY_SECONDS)
+            sent_bubbles += 1
+
+        if sent_bubbles >= MAX_STREAM_BUBBLES:
+            break
+
+    if buffer.strip() and sent_bubbles < MAX_STREAM_BUBBLES:
+        bubble = format_chat_response(buffer, max_bubbles=1).strip()
+        if bubble:
+            if sent_bubbles > 0:
+                yield "\n\n"
+                await asyncio.sleep(BUBBLE_PAUSE_SECONDS)
+            for char in bubble:
+                yield char
+                await asyncio.sleep(TYPE_DELAY_SECONDS)

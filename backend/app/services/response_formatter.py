@@ -1,7 +1,7 @@
 import re
 
-MAX_BUBBLES = 4
-MAX_BUBBLE_CHARS = 90
+MAX_BUBBLES = 3
+MAX_BUBBLE_CHARS = 56
 
 _SENTENCE_END = re.compile(r"(?<=[.!?\u3002\uff01\uff1f])\s+")
 _SOFT_BREAK_MARKERS = (
@@ -19,6 +19,9 @@ _SOFT_BREAK_MARKERS = (
 
 def _clean_text(text: str) -> str:
     cleaned = re.sub(r"[*_`>#-]+", " ", text or "")
+    cleaned = re.sub(r"\s*(STEP|Step|step)\s*\d+\.?\s*", " ", cleaned)
+    cleaned = re.sub(r"\s*\d+\s*(개월|시간)\s*", " ", cleaned)
+    cleaned = re.sub(r"\([^)]{8,}\)", " ", cleaned)
     cleaned = re.sub(
         r"^\s*(\uc88b\uc544\uc694|\ub124|\uc54c\uaca0\uc2b5\ub2c8\ub2e4|\ud655\uc778\ud588\uc2b5\ub2c8\ub2e4)\s*[-\u2013\u2014:]\s*",
         r"\1. ",
