@@ -42,6 +42,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
+        "http://chatbot.encorecampus.ai",
+        "https://chatbot.encorecampus.ai",
         "http://chatbot.encorecampus.ai.playdata.io",
         "https://chatbot.encorecampus.ai.playdata.io",
     ],

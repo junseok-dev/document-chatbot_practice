@@ -15,6 +15,7 @@ from app.services.faq_service import get_suggested_questions, is_guide_query, ma
 from app.services.guardrail_service import check as guardrail_check
 from app.services.openai_service import get_ai_response, get_ai_response_stream
 from app.services.prompt_service import get_prompt_value
+from app.services.response_formatter import format_chat_response
 
 router = APIRouter()
 
@@ -163,6 +164,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
                 processing_status = "failed"
                 error_message = str(exc)
 
+    answer = format_chat_response(answer)
     save_message(db, request.session_id, "assistant", answer, source=source)
     db.add(
         ChatLog(
@@ -210,10 +212,10 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
 
         async def _stream_static(text: str) -> None:
             nonlocal full_answer
-            full_answer = text
-            words = text.split(" ")
-            for i, word in enumerate(words):
-                token = word if i == len(words) - 1 else word + " "
+            full_answer = format_chat_response(text)
+            lines = full_answer.splitlines()
+            for i, line in enumerate(lines):
+                token = line if i == 0 else f"\n{line}"
                 yield _sse({"token": token})
                 await asyncio.sleep(0.015)
 
