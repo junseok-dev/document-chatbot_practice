@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
 
+from app.config import get_settings  # noqa: E402
 from app.db.database import SessionLocal  # noqa: E402
 from app.db.models import DocumentRecord  # noqa: E402
 from app.services.admin_service import _artifact_key  # noqa: E402
@@ -39,6 +40,7 @@ def _load_catalog_map() -> dict[str, dict[str, str]]:
 def backfill() -> None:
     catalog_map = _load_catalog_map()
     rag = get_rag_service()
+    settings = get_settings()
     db = SessionLocal()
 
     try:
@@ -92,7 +94,7 @@ def backfill() -> None:
             ]
             embedding_payload = {
                 "document_id": row.id,
-                "embedding_model": rag.settings.embedding_model,
+                "embedding_model": settings.embedding_model,
                 "strategy": "backfill",
                 "chunk_count": len(chunks),
             }
