@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import SessionLocal
 from app.db.models import FaqRecord
+from app.utils.crypto import decrypt_if_needed, maybe_encrypt
 
 FAQ_PATH = Path(__file__).parent.parent.parent.parent / "data" / "faq" / "faq.json"
 STOPWORDS = {
@@ -49,13 +50,13 @@ def _load_faq_json() -> dict:
 def _serialize_faq(record: FaqRecord) -> dict:
     return {
         "id": record.faq_key,
-        "category": record.category,
-        "question": record.question,
-        "answer": record.answer,
-        "keywords": json.loads(record.keywords_json or "[]"),
-        "aliases": json.loads(record.aliases_json or "[]"),
-        "search_hints": json.loads(record.search_hints_json or "[]"),
-        "source_files": json.loads(record.source_files_json or "[]"),
+        "category": decrypt_if_needed(record.category) or "",
+        "question": decrypt_if_needed(record.question) or "",
+        "answer": decrypt_if_needed(record.answer) or "",
+        "keywords": json.loads(decrypt_if_needed(record.keywords_json) or "[]"),
+        "aliases": json.loads(decrypt_if_needed(record.aliases_json) or "[]"),
+        "search_hints": json.loads(decrypt_if_needed(record.search_hints_json) or "[]"),
+        "source_files": json.loads(decrypt_if_needed(record.source_files_json) or "[]"),
         "direct_answer": record.direct_answer,
         "top_k": record.top_k,
     }
@@ -69,26 +70,26 @@ def seed_faqs(db: Session) -> None:
             continue
         existing = db.query(FaqRecord).filter(FaqRecord.faq_key == faq_key).first()
         if existing:
-            existing.category = faq.get("category", "")
-            existing.question = faq.get("question", "")
-            existing.answer = faq.get("answer", "")
-            existing.keywords_json = json.dumps(faq.get("keywords", []), ensure_ascii=False)
-            existing.aliases_json = json.dumps(faq.get("aliases", []), ensure_ascii=False)
-            existing.search_hints_json = json.dumps(faq.get("search_hints", []), ensure_ascii=False)
-            existing.source_files_json = json.dumps(faq.get("source_files", []), ensure_ascii=False)
+            existing.category = maybe_encrypt(faq.get("category", ""))
+            existing.question = maybe_encrypt(faq.get("question", ""))
+            existing.answer = maybe_encrypt(faq.get("answer", ""))
+            existing.keywords_json = maybe_encrypt(json.dumps(faq.get("keywords", []), ensure_ascii=False))
+            existing.aliases_json = maybe_encrypt(json.dumps(faq.get("aliases", []), ensure_ascii=False))
+            existing.search_hints_json = maybe_encrypt(json.dumps(faq.get("search_hints", []), ensure_ascii=False))
+            existing.source_files_json = maybe_encrypt(json.dumps(faq.get("source_files", []), ensure_ascii=False))
             existing.direct_answer = bool(faq.get("direct_answer", False))
             existing.top_k = int(faq.get("top_k", 4) or 4)
         else:
             db.add(
                 FaqRecord(
                     faq_key=faq_key,
-                    category=faq.get("category", ""),
-                    question=faq.get("question", ""),
-                    answer=faq.get("answer", ""),
-                    keywords_json=json.dumps(faq.get("keywords", []), ensure_ascii=False),
-                    aliases_json=json.dumps(faq.get("aliases", []), ensure_ascii=False),
-                    search_hints_json=json.dumps(faq.get("search_hints", []), ensure_ascii=False),
-                    source_files_json=json.dumps(faq.get("source_files", []), ensure_ascii=False),
+                    category=maybe_encrypt(faq.get("category", "")),
+                    question=maybe_encrypt(faq.get("question", "")),
+                    answer=maybe_encrypt(faq.get("answer", "")),
+                    keywords_json=maybe_encrypt(json.dumps(faq.get("keywords", []), ensure_ascii=False)),
+                    aliases_json=maybe_encrypt(json.dumps(faq.get("aliases", []), ensure_ascii=False)),
+                    search_hints_json=maybe_encrypt(json.dumps(faq.get("search_hints", []), ensure_ascii=False)),
+                    source_files_json=maybe_encrypt(json.dumps(faq.get("source_files", []), ensure_ascii=False)),
                     direct_answer=bool(faq.get("direct_answer", False)),
                     top_k=int(faq.get("top_k", 4) or 4),
                     is_active=True,

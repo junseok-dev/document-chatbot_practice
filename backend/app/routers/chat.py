@@ -16,6 +16,7 @@ from app.services.guardrail_service import check as guardrail_check
 from app.services.openai_service import get_ai_response, get_ai_response_stream
 from app.services.prompt_service import get_prompt_value
 from app.services.response_formatter import format_chat_response
+from app.utils.crypto import maybe_encrypt
 
 router = APIRouter()
 
@@ -212,11 +213,11 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     db.add(
         ChatLog(
             session_id=request.session_id,
-            question=request.message,
-            retrieval_chunks=json.dumps(retrieval_chunks, ensure_ascii=False),
-            answer=answer,
+            question=maybe_encrypt(request.message),
+            retrieval_chunks=maybe_encrypt(json.dumps(retrieval_chunks, ensure_ascii=False)),
+            answer=maybe_encrypt(answer),
             source=source,
-            error=error_message,
+            error=maybe_encrypt(error_message),
             processing_status=processing_status,
             embedding_cost=0.0,
             llm_cost=llm_cost,
@@ -344,11 +345,11 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
         db.add(
             ChatLog(
                 session_id=request.session_id,
-                question=request.message,
-                retrieval_chunks=json.dumps(retrieval_chunks, ensure_ascii=False),
-                answer=full_answer,
+                question=maybe_encrypt(request.message),
+                retrieval_chunks=maybe_encrypt(json.dumps(retrieval_chunks, ensure_ascii=False)),
+                answer=maybe_encrypt(full_answer),
                 source=source,
-                error=error_message,
+                error=maybe_encrypt(error_message),
                 processing_status=processing_status,
                 embedding_cost=0.0,
                 llm_cost=0.0,

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db.database import SessionLocal
 from app.db.models import ChunkRecord, DocumentRecord, FaqRecord
+from app.utils.crypto import decrypt_if_needed, maybe_encrypt
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
 FAISS_DIR = ROOT / "data" / "faiss_index"
@@ -250,7 +251,7 @@ class RAGService:
                 content = md_path.read_text(encoding="utf-8")
                 metadata = {
                     "file": item.logical_name,
-                    "title": item.original_filename,
+                    "title": decrypt_if_needed(item.original_filename) or item.logical_name,
                     "category": "document",
                     "document_id": item.id,
                     "source_type": "document",
@@ -286,13 +287,13 @@ class RAGService:
         db.query(ChunkRecord).filter(ChunkRecord.document_id == document_id).delete()
         for index, chunk in enumerate(chunks):
             db.add(
-                ChunkRecord(
-                    document_id=document_id,
-                    chunk_index=index,
-                    content=chunk.page_content,
-                    metadata_json=json.dumps(chunk.metadata, ensure_ascii=False),
+                    ChunkRecord(
+                        document_id=document_id,
+                        chunk_index=index,
+                        content=maybe_encrypt(chunk.page_content),
+                        metadata_json=maybe_encrypt(json.dumps(chunk.metadata, ensure_ascii=False)),
+                    )
                 )
-            )
         db.commit()
 
     def search_documents(

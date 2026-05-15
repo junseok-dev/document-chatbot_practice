@@ -1,6 +1,7 @@
 import axios from 'axios';
 import {
   AdminDocument,
+  AdminDocumentDetail,
   AdminFaq,
   AdminSession,
   AdminSessionDetail,
@@ -8,6 +9,7 @@ import {
   ChatResponse,
   ProcessingLog,
   PromptConfig,
+  PromptPayload,
   SuggestedQuestionsResponse,
 } from '../types';
 
@@ -108,7 +110,7 @@ export const adminApi = {
     return response.data;
   },
 
-  uploadPdf: async (file: File): Promise<{ message: string; document_id: number; status: string }> => {
+  uploadPdf: async (file: File): Promise<{ message: string; document: AdminDocument }> => {
     const formData = new FormData();
     formData.append('file', file);
     const response = await adminApiClient.post('/admin/upload-pdf', formData);
@@ -119,12 +121,23 @@ export const adminApi = {
     file: File,
     title?: string,
     category?: string,
-  ): Promise<{ message: string; document_id: number; logical_name: string; status: string }> => {
+  ): Promise<{ message: string; document: AdminDocument }> => {
     const formData = new FormData();
     formData.append('file', file);
     if (title) formData.append('title', title);
     if (category) formData.append('category', category);
     const response = await adminApiClient.post('/admin/upload-md', formData);
+    return response.data;
+  },
+
+  uploadFaqMd: async (
+    file: File,
+    category?: string,
+  ): Promise<{ message: string; document: AdminDocument; faqs: AdminFaq[] }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (category) formData.append('category', category);
+    const response = await adminApiClient.post('/admin/upload-faq-md', formData);
     return response.data;
   },
 
@@ -141,6 +154,11 @@ export const adminApi = {
 
   getDocuments: async (): Promise<{ documents: AdminDocument[] }> => {
     const response = await adminApiClient.get('/admin/documents');
+    return response.data;
+  },
+
+  getDocumentDetail: async (documentId: number): Promise<AdminDocumentDetail> => {
+    const response = await adminApiClient.get(`/admin/documents/${documentId}`);
     return response.data;
   },
 
@@ -164,8 +182,18 @@ export const adminApi = {
     return response.data;
   },
 
-  updateFaqs: async (faqs: AdminFaq[]): Promise<{ message: string }> => {
-    const response = await adminApiClient.put('/admin/faqs', { faqs });
+  createFaq: async (faq: AdminFaq): Promise<{ message: string; faq: AdminFaq }> => {
+    const response = await adminApiClient.post('/admin/faqs', faq);
+    return response.data;
+  },
+
+  updateFaq: async (faq: AdminFaq): Promise<{ message: string; faq: AdminFaq }> => {
+    const response = await adminApiClient.put(`/admin/faqs/${faq.id}`, faq);
+    return response.data;
+  },
+
+  deleteFaq: async (faqId: string): Promise<{ message: string }> => {
+    const response = await adminApiClient.delete(`/admin/faqs/${faqId}`);
     return response.data;
   },
 
@@ -174,13 +202,36 @@ export const adminApi = {
     return response.data;
   },
 
-  updatePrompts: async (prompts: PromptConfig[]): Promise<{ message: string }> => {
-    const response = await adminApiClient.put('/admin/prompts', { prompts });
+  createPrompt: async (prompt: PromptPayload): Promise<{ message: string; prompt: PromptConfig }> => {
+    const response = await adminApiClient.post('/admin/prompts', prompt);
+    return response.data;
+  },
+
+  updatePrompt: async (prompt: PromptPayload): Promise<{ message: string; prompt: PromptConfig }> => {
+    const response = await adminApiClient.put(`/admin/prompts/${prompt.prompt_key}`, prompt);
+    return response.data;
+  },
+
+  deletePrompt: async (promptKey: string): Promise<{ message: string }> => {
+    const response = await adminApiClient.delete(`/admin/prompts/${promptKey}`);
     return response.data;
   },
 
   getLogs: async (): Promise<{ processing_logs: ProcessingLog[]; chat_logs: ChatLog[] }> => {
     const response = await adminApiClient.get('/admin/logs');
+    return response.data;
+  },
+
+  getChatLogs: async (params?: { start_date?: string; end_date?: string; session_id?: string }): Promise<{ chat_logs: ChatLog[] }> => {
+    const response = await adminApiClient.get('/admin/chat-logs', { params });
+    return response.data;
+  },
+
+  exportChatLogs: async (params?: { start_date?: string; end_date?: string; session_id?: string }): Promise<Blob> => {
+    const response = await adminApiClient.get('/admin/chat-logs/export', {
+      params,
+      responseType: 'blob',
+    });
     return response.data;
   },
 };

@@ -1,5 +1,8 @@
 from cryptography.fernet import Fernet
+
 from app.config import get_settings
+
+ENCRYPTED_PREFIX = "enc::"
 
 
 def get_fernet() -> Fernet:
@@ -13,12 +16,31 @@ def encrypt(plain_text: str) -> str:
     if not plain_text:
         return ""
     f = get_fernet()
-    return f.encrypt(plain_text.encode()).decode()
+    token = f.encrypt(plain_text.encode()).decode()
+    return f"{ENCRYPTED_PREFIX}{token}"
 
 
 def decrypt(cipher_text: str) -> str:
     """암호화된 문자열을 복호화하여 반환"""
     if not cipher_text:
         return ""
+    if cipher_text.startswith(ENCRYPTED_PREFIX):
+        cipher_text = cipher_text[len(ENCRYPTED_PREFIX):]
     f = get_fernet()
     return f.decrypt(cipher_text.encode()).decode()
+
+
+def maybe_encrypt(value: str | None) -> str | None:
+    if value is None:
+        return None
+    if not value or value.startswith(ENCRYPTED_PREFIX):
+        return value
+    return encrypt(value)
+
+
+def decrypt_if_needed(value: str | None) -> str | None:
+    if value is None:
+        return None
+    if not value or not value.startswith(ENCRYPTED_PREFIX):
+        return value
+    return decrypt(value)

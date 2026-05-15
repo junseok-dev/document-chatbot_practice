@@ -21,6 +21,8 @@ from app.services.storage_service import (
     safe_unlink,
     upload_file_to_s3,
 )
+from app.services.transformation_service import convert_markdown_to_faq_items
+from app.utils.crypto import maybe_encrypt
 from app.utils.pdf_converter import convert_pdf_to_md
 
 
@@ -52,8 +54,8 @@ def create_processing_log(
             document_id=document_id,
             log_type=log_type,
             status=status,
-            message=message,
-            detail=detail,
+            message=maybe_encrypt(message),
+            detail=maybe_encrypt(detail),
         )
     )
     db.commit()
@@ -76,7 +78,7 @@ async def _process_md_content(
     record = DocumentRecord(
         logical_name=logical_name,
         version=version,
-        original_filename=filename,
+        original_filename=maybe_encrypt(filename),
         storage_key=None,
         md_path=str(managed_md_path),
         parser_type="markdown",
@@ -176,7 +178,7 @@ async def _process_md_content(
         return record
     except Exception as exc:
         record.status = "failed"
-        record.error_message = str(exc)
+        record.error_message = maybe_encrypt(str(exc))
         db.commit()
         create_processing_log(db, "document", "failed", "문서 처리 실패", document_id=record.id, detail=str(exc))
         raise
@@ -198,6 +200,42 @@ async def process_uploaded_md(
         category=category or "document",
         reindex=True,
     )
+
+
+async def process_uploaded_faq_md(
+    db: Session,
+    filename: str,
+    content: bytes,
+    category: str | None = None,
+) -> tuple[DocumentRecord, list[dict]]:
+    ensure_storage_dirs()
+    md_content = content.decode("utf-8")
+    logical_name = _slugify(Path(filename).stem)
+    version = _next_version(db, logical_name)
+
+    managed_md_path = MANAGED_DOCS_DIR / f"{logical_name}_v{version}.md"
+    managed_md_path.write_text(md_content, encoding="utf-8")
+
+    faq_items = await convert_markdown_to_faq_items(md_content, category=category)
+    managed_json_path = MANAGED_JSON_DIR / f"{logical_name}_v{version}.faq.json"
+    managed_json_path.write_text(json.dumps(faq_items, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    record = DocumentRecord(
+        logical_name=logical_name,
+        version=version,
+        original_filename=maybe_encrypt(filename),
+        storage_key=None,
+        md_path=str(managed_md_path),
+        json_path=str(managed_json_path),
+        parser_type="faq_json",
+        status="ready",
+        is_active=True,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    create_processing_log(db, "faq_import", "ready", f"{filename} FAQ JSON 변환 완료", document_id=record.id)
+    return record, faq_items
 
 
 async def process_catalog_import(
@@ -245,7 +283,7 @@ async def process_uploaded_pdf(db: Session, filename: str, content: bytes) -> Do
     record = DocumentRecord(
         logical_name=logical_name,
         version=version,
-        original_filename=filename,
+        original_filename=maybe_encrypt(filename),
         storage_key=storage_key,
         pdf_path=str(pdf_path),
         status="uploaded",
@@ -341,7 +379,7 @@ async def process_uploaded_pdf(db: Session, filename: str, content: bytes) -> Do
         return record
     except Exception as exc:
         record.status = "failed"
-        record.error_message = str(exc)
+        record.error_message = maybe_encrypt(str(exc))
         db.commit()
         create_processing_log(db, "document", "failed", "문서 처리 실패", document_id=record.id, detail=str(exc))
         raise

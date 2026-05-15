@@ -61,10 +61,20 @@ export interface AdminDocument {
   version: number;
   original_filename: string;
   status: 'uploaded' | 'parsing' | 'embedding' | 'ready' | 'failed' | 'deleted';
+  parser_type: string | null;
   is_active: boolean;
   error_message: string | null;
   created_at: string;
   updated_at: string | null;
+  has_md: boolean;
+  has_json: boolean;
+  has_pdf: boolean;
+}
+
+export interface AdminDocumentDetail {
+  document: AdminDocument;
+  md_content: string | null;
+  json_content: string | null;
 }
 
 export interface AdminFaq {
@@ -109,4 +119,10 @@ export interface ChatLog {
   embedding_cost: number;
   llm_cost: number;
   created_at: string;
+}
+
+export interface PromptPayload {
+  prompt_key: string;
+  label: string;
+  content: string;
 }
