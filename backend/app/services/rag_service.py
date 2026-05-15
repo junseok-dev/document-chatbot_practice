@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db.database import SessionLocal
 from app.db.models import ChunkRecord, DocumentRecord, FaqRecord
+from app.services.storage_service import download_faiss_from_s3, upload_faiss_to_s3
 from app.utils.crypto import decrypt_if_needed, maybe_encrypt
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -72,6 +73,8 @@ class RAGService:
         self._documents: list[Document] = []
         self._keyword_index: list[tuple[Document, set[str], str]] = []
         faiss_path = FAISS_DIR / "index.faiss"
+        if self._embeddings and not faiss_path.exists():
+            download_faiss_from_s3()
         if self._embeddings and faiss_path.exists():
             self._vectorstore = FAISS.load_local(
                 str(FAISS_DIR),
@@ -279,6 +282,7 @@ class RAGService:
             self._documents = documents
             self._keyword_index = self._build_keyword_index(documents)
             self._vectorstore.save_local(str(FAISS_DIR))
+            upload_faiss_to_s3()
         finally:
             if owns_session:
                 db.close()
