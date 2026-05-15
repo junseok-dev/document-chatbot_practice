@@ -41,6 +41,18 @@ def maybe_encrypt(value: str | None) -> str | None:
 def decrypt_if_needed(value: str | None) -> str | None:
     if value is None:
         return None
-    if not value or not value.startswith(ENCRYPTED_PREFIX):
+    if not value:
         return value
-    return decrypt(value)
+    if value.startswith(ENCRYPTED_PREFIX):
+        try:
+            return decrypt(value)
+        except Exception:
+            return ""
+    # enc:: 없이 저장된 구버전 Fernet 토큰 처리
+    if value.startswith("gAAA"):
+        try:
+            f = get_fernet()
+            return f.decrypt(value.encode()).decode()
+        except Exception:
+            pass
+    return value
