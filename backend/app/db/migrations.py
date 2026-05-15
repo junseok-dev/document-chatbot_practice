@@ -17,6 +17,27 @@ def _column_sql(table_name: str, column_name: str) -> str | None:
     return None
 
 
+def _ensure_text_columns(engine: Engine) -> None:
+    inspector = inspect(engine)
+    targets = {
+        "documents": {"original_filename"},
+        "faqs": {"category"},
+    }
+
+    for table_name, column_names in targets.items():
+        if table_name not in inspector.get_table_names():
+            continue
+        for column in inspector.get_columns(table_name):
+            name = column["name"]
+            if name not in column_names:
+                continue
+            column_type = str(column["type"]).lower()
+            if "char" not in column_type and "varchar" not in column_type:
+                continue
+            with engine.begin() as connection:
+                connection.execute(text(f"ALTER TABLE {table_name} ALTER COLUMN {name} TYPE TEXT"))
+
+
 def migrate_database(engine: Engine) -> None:
     inspector = inspect(engine)
 
@@ -31,3 +52,4 @@ def migrate_database(engine: Engine) -> None:
             with engine.begin() as connection:
                 connection.execute(text(f"ALTER TABLE documents ADD COLUMN {column_name} {column_sql}"))
 
+    _ensure_text_columns(engine)

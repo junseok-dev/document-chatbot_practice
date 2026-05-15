@@ -31,7 +31,7 @@ class DocumentRecord(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     logical_name = Column(String(255), index=True, nullable=False)
     version = Column(Integer, default=1, nullable=False)
-    original_filename = Column(String(255), nullable=False)
+    original_filename = Column(Text, nullable=False)
     storage_key = Column(String(512), nullable=True)
     pdf_path = Column(Text, nullable=True)
     md_path = Column(Text, nullable=True)
@@ -115,7 +115,7 @@ class FaqRecord(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     faq_key = Column(String(50), unique=True, index=True, nullable=False)
-    category = Column(String(100), nullable=False)
+    category = Column(Text, nullable=False)
     question = Column(Text, nullable=False)
     answer = Column(Text, nullable=False)
     keywords_json = Column(Text, nullable=True)

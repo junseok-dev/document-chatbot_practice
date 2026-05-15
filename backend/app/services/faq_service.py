@@ -64,6 +64,11 @@ def _serialize_faq(record: FaqRecord) -> dict:
 
 def seed_faqs(db: Session) -> None:
     payload = _load_faq_json()
+    json_keys = {faq.get("id") for faq in payload.get("faqs", []) if faq.get("id")}
+
+    # 현재 JSON에 없는 DB 레코드 삭제
+    db.query(FaqRecord).filter(FaqRecord.faq_key.notin_(json_keys)).delete(synchronize_session=False)
+
     for faq in payload.get("faqs", []):
         faq_key = faq.get("id")
         if not faq_key:
@@ -79,6 +84,7 @@ def seed_faqs(db: Session) -> None:
             existing.source_files_json = maybe_encrypt(json.dumps(faq.get("source_files", []), ensure_ascii=False))
             existing.direct_answer = bool(faq.get("direct_answer", False))
             existing.top_k = int(faq.get("top_k", 4) or 4)
+            existing.is_active = True
         else:
             db.add(
                 FaqRecord(
