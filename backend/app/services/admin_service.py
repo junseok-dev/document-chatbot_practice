@@ -21,6 +21,7 @@ from app.services.storage_service import (
     delete_storage_path,
     delete_s3_key,
     ensure_storage_dirs,
+    is_s3_uri,
     read_text_from_storage,
     safe_unlink,
     upload_file_to_s3,
@@ -456,7 +457,7 @@ def hard_delete_document(db: Session, record: DocumentRecord) -> None:
 def retry_document_processing(db: Session, record: DocumentRecord) -> DocumentRecord:
     if not record.pdf_path:
         raise ValueError("원본 PDF 경로가 없습니다.")
-    if not Path(record.pdf_path).exists():
+    if not is_s3_uri(record.pdf_path) and not Path(record.pdf_path).exists():
         raise FileNotFoundError("원본 PDF 파일을 찾을 수 없습니다.")
     record.status = "uploaded"
     record.error_message = None
