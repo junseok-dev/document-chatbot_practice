@@ -402,7 +402,13 @@ export default function AdminPage() {
               <p className="mt-2 max-w-3xl text-sm text-cyan-50/85">검토 대기 문서 {reviewCount}건. 승인 전까지는 운영 검색/RAG에 반영되지 않습니다.</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => void loadDashboard()} className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20">
+              <button
+                onClick={async () => {
+                  await loadDashboard();
+                  if (selectedDocument) await openDocument(selectedDocument.document.id);
+                }}
+                className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20"
+              >
                 새로고침
               </button>
               <button onClick={() => { clearAdminPassword(); setAuthenticated(false); }} className="rounded-xl bg-white px-4 py-2 text-sm font-medium text-slate-900">
