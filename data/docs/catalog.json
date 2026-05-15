@@ -1,96 +1,102 @@
 {
   "documents": [
     {
-      "path": "privacy_law.md",
-      "title": "개인정보 보호법",
-      "category": "법령",
-      "source": "개인정보 보호법(법령).pdf"
-    },
-    {
-      "path": "fair_labeling_law.md",
-      "title": "표시·광고의 공정화에 관한 법률",
-      "category": "법령",
-      "source": "표시광고법(법령).pdf"
-    },
-    {
       "path": "national_training_card_regulation.md",
       "title": "국민내일배움카드 운영규정",
-      "category": "운영규정",
+      "category": "국민내일배움카드 발급",
       "source": "국민내일배움카드 운영규정.pdf"
     },
     {
       "path": "national_training_card_eligibility.md",
       "title": "국민내일배움카드 발급자격",
-      "category": "운영규정",
+      "category": "국민내일배움카드 발급",
       "source": "국민내일배움카드_발급자격.pdf"
     },
     {
       "path": "vocational_training_regulation.md",
       "title": "직업능력개발훈련 운영규정",
-      "category": "운영규정",
+      "category": "HRD-Net 수강신청",
       "source": "직업능력개발훈련 운영규정.pdf"
     },
     {
       "path": "course_ai_orchestration.md",
       "title": "AI 오케스트레이션 과정 상세",
-      "category": "과정 상세",
+      "category": "교육 프로그램",
       "source": "과정상세내용_AI 오케스트레이션.pdf"
     },
     {
       "path": "course_mlops.md",
       "title": "MLOps 엔지니어 과정 상세",
-      "category": "과정 상세",
+      "category": "교육 프로그램",
       "source": "과정상세내용_MLOps 엔지니어.pdf"
     },
     {
       "path": "course_ml_engineer.md",
       "title": "머신러닝 엔지니어 과정 상세",
-      "category": "과정 상세",
+      "category": "교육 프로그램",
       "source": "과정상세내용_머신러닝 엔지니어.pdf"
     },
     {
       "path": "playdata_intro.md",
       "title": "플레이데이터 기관 정보 소개",
-      "category": "플레이데이터 정보",
+      "category": "교육대상",
       "source": "플레이데이터_기관정보_소개서.pdf"
     },
     {
       "path": "campus_info.md",
       "title": "플레이데이터 캠퍼스 정보",
-      "category": "플레이데이터 정보",
+      "category": "교육대상",
       "source": "플레이데이터 캠퍼스 정보.pdf"
     },
     {
       "path": "homepage_intro.md",
       "title": "플레이데이터 홈페이지 소개",
-      "category": "플레이데이터 정보",
+      "category": "인터뷰 문의",
       "source": "플레이데이터_홈페이지_소개.pdf"
     }
   ],
   "categories": [
     {
-      "id": "law",
-      "label": "법령",
-      "description": "개인정보 처리와 광고 표현에 대한 법적 기준을 안내합니다.",
-      "query": "법 관련해서는 어떤 걸 물어보면 돼?"
+      "id": "interview",
+      "label": "인터뷰 문의",
+      "description": "인터뷰 방식, 질문 유형, 선발 기준, 합격 발표 안내",
+      "query": "엔코아 AI 캠퍼스 인터뷰는 어떻게 진행되나요?"
     },
     {
-      "id": "regulation",
-      "label": "운영규정",
-      "description": "국민내일배움카드, 교육비, 훈련장려금, 출결 기준을 안내합니다.",
-      "query": "운영규정 쪽에서는 어떤 걸 물어보면 돼?"
+      "id": "program",
+      "label": "교육 프로그램",
+      "description": "3가지 과정 소개, 커리큘럼, 교육 기간, 수업 방식 안내",
+      "query": "엔코아 AI 캠퍼스 교육 프로그램을 소개해 주세요"
     },
     {
-      "id": "course",
-      "label": "과정 상세",
-      "description": "세 과정의 차이, 추천 대상, 프로젝트 방향을 안내합니다.",
-      "query": "과정 쪽은 어떤 질문을 하면 좋아?"
+      "id": "target",
+      "label": "교육대상",
+      "description": "지원 자격, 나이·전공 제한, 비전공자·경력자 지원 가능 여부",
+      "query": "엔코아 AI 캠퍼스 교육 대상이 어떻게 되나요?"
     },
     {
-      "id": "playdata",
-      "label": "플레이데이터 정보",
-      "description": "기관 소개, 홈페이지 메시지, 캠퍼스 운영 정보를 안내합니다.",
-      "query": "플레이데이터 정보 쪽에서는 뭘 물어보면 돼?"
+      "id": "selection",
+      "label": "교육생 선발",
+      "description": "선발 절차, 입과 순서, 추가선발 대기 안내",
+      "query": "엔코아 AI 캠퍼스 교육생 선발 과정이 어떻게 되나요?"
+    },
+    {
+      "id": "employment",
+      "label": "취업지원",
+      "description": "취업 지원 프로그램, 채용 연계, 우수 수료생 혜택",
+      "query": "엔코아 AI 캠퍼스 취업 지원 프로그램이 궁금해요"
+    },
+    {
+      "id": "hrd",
+      "label": "HRD-Net 수강신청",
+      "description": "고용24 수강신청 방법, 신청 기한, 수료 조건, 훈련장려금",
+      "query": "고용24 수강신청은 어떻게 하나요?"
+    },
+    {
+      "id": "card",
+      "label": "국민내일배움카드 발급",
+      "description": "내일배움카드 발급 방법, 발급 자격, KDT 수강 조건",
+      "query": "국민내일배움카드 발급은 어떻게 하나요?"
     }
   ]
 }

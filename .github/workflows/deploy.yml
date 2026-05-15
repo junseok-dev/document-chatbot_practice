@@ -14,7 +14,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_KEY }}
-          envs: OPENAI_API_KEY,ENCRYPTION_KEY,ADMIN_PASSWORD,VITE_GOOGLE_CLIENT_ID,CHANNEL_TALK_URL
+          envs: OPENAI_API_KEY,ENCRYPTION_KEY,ADMIN_PASSWORD,VITE_GOOGLE_CLIENT_ID,CHANNEL_TALK_URL,DATABASE_URL
           script: |
             cd ~/document-chatbot_practice
             git pull
@@ -24,6 +24,7 @@ jobs:
             ADMIN_PASSWORD=$ADMIN_PASSWORD
             MODEL_NAME=gpt-5-mini
             CHANNEL_TALK_URL=$CHANNEL_TALK_URL
+            DATABASE_URL=$DATABASE_URL
             EOF
             echo "VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID" > frontend/.env
             source backend/venv/bin/activate

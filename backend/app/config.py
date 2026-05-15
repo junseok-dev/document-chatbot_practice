@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
     encryption_key: str = ""
     admin_password: str = "admin1234"
-    database_url: str = "sqlite:///./chatbot.db"
+    database_url: str = ""
 
     aws_region: str = "ap-northeast-2"
     aws_access_key_id: str = ""
