@@ -404,12 +404,14 @@ export default function AdminPage() {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={async () => {
+                  setLoading(true);
                   await loadDashboard();
                   if (selectedDocument) await openDocument(selectedDocument.document.id);
                 }}
-                className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20"
+                disabled={loading}
+                className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 disabled:opacity-60"
               >
-                새로고침
+                {loading ? '새로고침 중...' : '새로고침'}
               </button>
               <button onClick={() => { clearAdminPassword(); setAuthenticated(false); }} className="rounded-xl bg-white px-4 py-2 text-sm font-medium text-slate-900">
                 로그아웃
