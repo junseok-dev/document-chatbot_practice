@@ -5,11 +5,14 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.db.database import SessionLocal
 from app.db.models import FaqRecord
+from app.services.storage_service import build_s3_key, read_text_from_storage, upload_text_to_s3
 from app.utils.crypto import decrypt_if_needed, maybe_encrypt
 
 FAQ_PATH = Path(__file__).parent.parent.parent.parent / "data" / "faq" / "faq.json"
+FAQ_STORAGE_KEY = build_s3_key("faq", "faq.json")
 STOPWORDS = {
     "안내",
     "가능",
@@ -42,6 +45,14 @@ def _tokenize(text: str) -> set[str]:
 
 
 def _load_faq_json() -> dict:
+    remote = None
+    if get_settings().aws_s3_bucket:
+        try:
+            remote = read_text_from_storage(f"s3://{get_settings().aws_s3_bucket}/{FAQ_STORAGE_KEY}")
+        except Exception:
+            remote = None
+    if remote:
+        return json.loads(remote)
     if not FAQ_PATH.exists():
         return {"faqs": [], "suggested_questions": [], "categories": []}
     return json.loads(FAQ_PATH.read_text(encoding="utf-8"))
@@ -109,7 +120,11 @@ def sync_faqs_to_file(db: Session) -> None:
     payload = _load_faq_json()
     payload["faqs"] = [_serialize_faq(row) for row in db.query(FaqRecord).filter(FaqRecord.is_active.is_(True)).order_by(FaqRecord.id.asc()).all()]
     FAQ_PATH.parent.mkdir(parents=True, exist_ok=True)
-    FAQ_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    content = json.dumps(payload, ensure_ascii=False, indent=2)
+    FAQ_PATH.write_text(content, encoding="utf-8")
+    uploaded = upload_text_to_s3(content, FAQ_STORAGE_KEY, content_type="application/json; charset=utf-8")
+    if uploaded and FAQ_PATH.exists():
+        FAQ_PATH.unlink()
 
 
 def _get_faq_data() -> dict:

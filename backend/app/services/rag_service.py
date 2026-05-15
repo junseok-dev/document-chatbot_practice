@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db.database import SessionLocal
 from app.db.models import ChunkRecord, DocumentRecord, FaqRecord
-from app.services.storage_service import download_faiss_from_s3, upload_faiss_to_s3
+from app.services.storage_service import download_faiss_from_s3, read_text_from_storage, upload_faiss_to_s3
 from app.utils.crypto import decrypt_if_needed, maybe_encrypt
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -248,10 +248,9 @@ class RAGService:
             for item in active_docs:
                 if not item.md_path:
                     continue
-                md_path = Path(item.md_path)
-                if not md_path.exists():
+                content = read_text_from_storage(item.md_path)
+                if not content:
                     continue
-                content = md_path.read_text(encoding="utf-8")
                 metadata = {
                     "file": item.logical_name,
                     "title": decrypt_if_needed(item.original_filename) or item.logical_name,
@@ -263,11 +262,13 @@ class RAGService:
 
             active_faqs = db.query(FaqRecord).filter(FaqRecord.is_active.is_(True)).order_by(FaqRecord.id.asc()).all()
             for faq in active_faqs:
-                faq_text = f"FAQ 질문: {faq.question}\nFAQ 답변: {faq.answer}"
+                faq_question = decrypt_if_needed(faq.question) or ""
+                faq_answer = decrypt_if_needed(faq.answer) or ""
+                faq_text = f"FAQ 질문: {faq_question}\nFAQ 답변: {faq_answer}"
                 metadata = {
                     "file": f"faq::{faq.faq_key}",
-                    "title": faq.question,
-                    "category": faq.category,
+                    "title": faq_question,
+                    "category": decrypt_if_needed(faq.category) or "",
                     "source_type": "faq",
                 }
                 documents.extend(self.build_chunks_for_markdown(faq_text, metadata))

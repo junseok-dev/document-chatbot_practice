@@ -28,6 +28,7 @@ from app.services.admin_service import (
 )
 from app.services.faq_service import _serialize_faq, seed_faqs, sync_faqs_to_file
 from app.services.prompt_service import PROMPT_DEFAULTS, seed_prompt_configs, serialize_prompt
+from app.services.storage_service import read_text_from_storage, storage_exists
 from app.utils.crypto import decrypt_if_needed, encrypt, maybe_encrypt
 
 router = APIRouter()
@@ -85,19 +86,14 @@ def _serialize_document(record: DocumentRecord) -> dict:
         "error_message": decrypt_if_needed(record.error_message),
         "created_at": record.created_at,
         "updated_at": record.updated_at,
-        "has_md": bool(record.md_path and Path(record.md_path).exists()),
-        "has_json": bool(record.json_path and Path(record.json_path).exists()),
-        "has_pdf": bool(record.pdf_path and Path(record.pdf_path).exists()),
+        "has_md": storage_exists(record.md_path),
+        "has_json": storage_exists(record.json_path),
+        "has_pdf": storage_exists(record.pdf_path) or bool(record.storage_key),
     }
 
 
 def _read_optional_text(path_value: str | None) -> str | None:
-    if not path_value:
-        return None
-    path = Path(path_value)
-    if not path.exists() or not path.is_file():
-        return None
-    return path.read_text(encoding="utf-8")
+    return read_text_from_storage(path_value)
 
 
 def _serialize_processing_log(row: ProcessingLog) -> dict:

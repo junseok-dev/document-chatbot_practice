@@ -33,7 +33,9 @@ def seed_prompt_configs(db: Session) -> None:
 def update_counseling_prompt(db: Session) -> None:
     settings = get_settings()
     record = db.query(PromptConfig).filter(PromptConfig.prompt_key == "counseling_prompt").first()
-    if not record:
+    if record:
+        record.content = maybe_encrypt(settings.default_counseling_prompt)
+    else:
         db.add(
             PromptConfig(
                 prompt_key="counseling_prompt",
@@ -41,7 +43,7 @@ def update_counseling_prompt(db: Session) -> None:
                 content=maybe_encrypt(settings.default_counseling_prompt),
             )
         )
-        db.commit()
+    db.commit()
 
 
 def _get_prompt_value(db: Session, prompt_key: str) -> str:

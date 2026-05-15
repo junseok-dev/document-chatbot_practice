@@ -17,10 +17,15 @@ from app.services.storage_service import (
     MANAGED_EMBEDDINGS_DIR,
     MANAGED_JSON_DIR,
     PDF_DIR,
+    build_s3_key,
+    delete_storage_path,
     delete_s3_key,
     ensure_storage_dirs,
+    read_text_from_storage,
     safe_unlink,
     upload_file_to_s3,
+    upload_json_to_s3,
+    upload_text_to_s3,
 )
 from app.services.transformation_service import convert_markdown_to_faq_items
 from app.utils.crypto import maybe_encrypt
@@ -30,6 +35,10 @@ from app.utils.pdf_converter import convert_pdf_to_md
 def _slugify(value: str) -> str:
     lowered = re.sub(r"[^\w]+", "_", Path(value).stem.lower()).strip("_")
     return lowered or "document"
+
+
+def _artifact_key(logical_name: str, version: int, filename: str) -> str:
+    return build_s3_key("documents", logical_name, f"v{version}", filename)
 
 
 def _next_version(db: Session, logical_name: str) -> int:
@@ -136,13 +145,16 @@ async def _process_md_content(
 
     managed_md_path = MANAGED_DOCS_DIR / f"{logical_name}_v{version}.md"
     managed_md_path.write_text(md_content, encoding="utf-8")
+    md_storage = upload_text_to_s3(md_content, _artifact_key(logical_name, version, "document.md"))
+    if md_storage:
+        safe_unlink(str(managed_md_path))
 
     record = DocumentRecord(
         logical_name=logical_name,
         version=version,
         original_filename=maybe_encrypt(filename),
         storage_key=None,
-        md_path=str(managed_md_path),
+        md_path=md_storage or str(managed_md_path),
         parser_type="markdown",
         status="embedding",
         is_active=False,
@@ -168,52 +180,43 @@ async def _process_md_content(
         rag.replace_document_chunks(db, record.id, chunks)
 
         json_path = MANAGED_JSON_DIR / f"{logical_name}_v{version}.json"
-        json_path.write_text(
-            json.dumps(
-                {
-                    "document_id": record.id,
-                    "logical_name": logical_name,
-                    "version": version,
-                    "original_filename": filename,
-                    "title": title,
-                    "category": category,
-                    "status": "review",
-                    "chunk_count": len(chunks),
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+        json_payload = {
+            "document_id": record.id,
+            "logical_name": logical_name,
+            "version": version,
+            "original_filename": filename,
+            "title": title,
+            "category": category,
+            "status": "review",
+            "chunk_count": len(chunks),
+        }
+        json_path.write_text(json.dumps(json_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        json_storage = upload_json_to_s3(json_payload, _artifact_key(logical_name, version, "document.json"))
+        if json_storage:
+            safe_unlink(str(json_path))
 
         chunk_path = MANAGED_CHUNKS_DIR / f"{logical_name}_v{version}.json"
-        chunk_path.write_text(
-            json.dumps(
-                [{"index": i, "content": chunk.page_content, "metadata": chunk.metadata} for i, chunk in enumerate(chunks)],
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+        chunk_payload = [{"index": i, "content": chunk.page_content, "metadata": chunk.metadata} for i, chunk in enumerate(chunks)]
+        chunk_path.write_text(json.dumps(chunk_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        chunk_storage = upload_json_to_s3(chunk_payload, _artifact_key(logical_name, version, "chunks.json"))
+        if chunk_storage:
+            safe_unlink(str(chunk_path))
 
         embedding_path = MANAGED_EMBEDDINGS_DIR / f"{logical_name}_v{version}.json"
-        embedding_path.write_text(
-            json.dumps(
-                {
-                    "document_id": record.id,
-                    "embedding_model": get_settings().embedding_model,
-                    "strategy": "full_rebuild",
-                    "chunk_count": len(chunks),
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+        embedding_payload = {
+            "document_id": record.id,
+            "embedding_model": get_settings().embedding_model,
+            "strategy": "full_rebuild",
+            "chunk_count": len(chunks),
+        }
+        embedding_path.write_text(json.dumps(embedding_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        embedding_storage = upload_json_to_s3(embedding_payload, _artifact_key(logical_name, version, "embedding.json"))
+        if embedding_storage:
+            safe_unlink(str(embedding_path))
 
-        record.json_path = str(json_path)
-        record.chunk_path = str(chunk_path)
-        record.embedding_path = str(embedding_path)
+        record.json_path = json_storage or str(json_path)
+        record.chunk_path = chunk_storage or str(chunk_path)
+        record.embedding_path = embedding_storage or str(embedding_path)
         record.status = "review"
         record.error_message = None
         db.commit()
@@ -259,18 +262,24 @@ async def process_uploaded_faq_md(
 
     managed_md_path = MANAGED_DOCS_DIR / f"{logical_name}_v{version}.md"
     managed_md_path.write_text(md_content, encoding="utf-8")
+    md_storage = upload_text_to_s3(md_content, _artifact_key(logical_name, version, "document.md"))
+    if md_storage:
+        safe_unlink(str(managed_md_path))
 
     faq_items = await convert_markdown_to_faq_items(md_content, category=category)
     managed_json_path = MANAGED_JSON_DIR / f"{logical_name}_v{version}.faq.json"
     managed_json_path.write_text(json.dumps(faq_items, ensure_ascii=False, indent=2), encoding="utf-8")
+    faq_json_storage = upload_json_to_s3(faq_items, _artifact_key(logical_name, version, "faq.json"))
+    if faq_json_storage:
+        safe_unlink(str(managed_json_path))
 
     record = DocumentRecord(
         logical_name=logical_name,
         version=version,
         original_filename=maybe_encrypt(filename),
         storage_key=None,
-        md_path=str(managed_md_path),
-        json_path=str(managed_json_path),
+        md_path=md_storage or str(managed_md_path),
+        json_path=faq_json_storage or str(managed_json_path),
         parser_type="faq_json",
         status="review",
         is_active=False,
@@ -322,14 +331,14 @@ async def process_uploaded_pdf(db: Session, filename: str, content: bytes) -> Do
 
     settings = get_settings()
     storage_key = f"{settings.aws_s3_prefix.rstrip('/')}/pdf/{stored_filename}" if settings.aws_s3_bucket else None
-    upload_file_to_s3(pdf_path, storage_key) if storage_key else None
+    uploaded_pdf_uri = upload_file_to_s3(pdf_path, storage_key) if storage_key else None
 
     record = DocumentRecord(
         logical_name=logical_name,
         version=version,
         original_filename=maybe_encrypt(filename),
         storage_key=storage_key,
-        pdf_path=str(pdf_path),
+        pdf_path=uploaded_pdf_uri or str(pdf_path),
         status="uploaded",
         is_active=False,
         is_deleted=False,
@@ -346,10 +355,14 @@ async def process_uploaded_pdf(db: Session, filename: str, content: bytes) -> Do
         generated_md_path = await convert_pdf_to_md(pdf_path)
 
         managed_md_path = MANAGED_DOCS_DIR / f"{logical_name}_v{version}.md"
-        managed_md_path.write_text(generated_md_path.read_text(encoding="utf-8"), encoding="utf-8")
+        markdown = generated_md_path.read_text(encoding="utf-8")
+        managed_md_path.write_text(markdown, encoding="utf-8")
+        md_storage = upload_text_to_s3(markdown, _artifact_key(logical_name, version, "document.md"))
         safe_unlink(str(generated_md_path))
+        if md_storage:
+            safe_unlink(str(managed_md_path))
 
-        record.md_path = str(managed_md_path)
+        record.md_path = md_storage or str(managed_md_path)
         record.parser_type = "markdown"
         create_processing_log(db, "document", "parsing", "PDF 파싱 성공", document_id=record.id)
 
@@ -358,7 +371,6 @@ async def process_uploaded_pdf(db: Session, filename: str, content: bytes) -> Do
         create_processing_log(db, "document", "embedding", "chunk/embedding 생성 시작", document_id=record.id)
 
         rag = get_rag_service()
-        markdown = managed_md_path.read_text(encoding="utf-8")
         chunks = rag.build_chunks_for_markdown(
             markdown,
             {
@@ -372,50 +384,39 @@ async def process_uploaded_pdf(db: Session, filename: str, content: bytes) -> Do
         rag.replace_document_chunks(db, record.id, chunks)
 
         json_path = MANAGED_JSON_DIR / f"{logical_name}_v{version}.json"
-        json_path.write_text(
-            json.dumps(
-                {
-                    "document_id": record.id,
-                    "logical_name": logical_name,
-                    "version": version,
-                    "original_filename": filename,
-                    "status": "review",
-                    "chunk_count": len(chunks),
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+        json_payload = {
+            "document_id": record.id,
+            "logical_name": logical_name,
+            "version": version,
+            "original_filename": filename,
+            "status": "review",
+            "chunk_count": len(chunks),
+        }
+        json_path.write_text(json.dumps(json_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        json_storage = upload_json_to_s3(json_payload, _artifact_key(logical_name, version, "document.json"))
 
         chunk_path = MANAGED_CHUNKS_DIR / f"{logical_name}_v{version}.json"
-        chunk_path.write_text(
-            json.dumps(
-                [{"index": index, "content": chunk.page_content, "metadata": chunk.metadata} for index, chunk in enumerate(chunks)],
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+        chunk_payload = [{"index": index, "content": chunk.page_content, "metadata": chunk.metadata} for index, chunk in enumerate(chunks)]
+        chunk_path.write_text(json.dumps(chunk_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        chunk_storage = upload_json_to_s3(chunk_payload, _artifact_key(logical_name, version, "chunks.json"))
+        if chunk_storage:
+            safe_unlink(str(chunk_path))
 
         embedding_path = MANAGED_EMBEDDINGS_DIR / f"{logical_name}_v{version}.json"
-        embedding_path.write_text(
-            json.dumps(
-                {
-                    "document_id": record.id,
-                    "embedding_model": get_settings().embedding_model,
-                    "strategy": "full_rebuild",
-                    "chunk_count": len(chunks),
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+        embedding_payload = {
+            "document_id": record.id,
+            "embedding_model": get_settings().embedding_model,
+            "strategy": "full_rebuild",
+            "chunk_count": len(chunks),
+        }
+        embedding_path.write_text(json.dumps(embedding_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        embedding_storage = upload_json_to_s3(embedding_payload, _artifact_key(logical_name, version, "embedding.json"))
+        if embedding_storage:
+            safe_unlink(str(embedding_path))
 
-        record.json_path = str(json_path)
-        record.chunk_path = str(chunk_path)
-        record.embedding_path = str(embedding_path)
+        record.json_path = json_storage or str(json_path)
+        record.chunk_path = chunk_storage or str(chunk_path)
+        record.embedding_path = embedding_storage or str(embedding_path)
         record.status = "review"
         record.error_message = None
         db.commit()
@@ -432,11 +433,11 @@ async def process_uploaded_pdf(db: Session, filename: str, content: bytes) -> Do
 
 
 def delete_document_assets(db: Session, record: DocumentRecord) -> None:
-    safe_unlink(record.pdf_path)
-    safe_unlink(record.md_path)
-    safe_unlink(record.json_path)
-    safe_unlink(record.chunk_path)
-    safe_unlink(record.embedding_path)
+    delete_storage_path(record.pdf_path)
+    delete_storage_path(record.md_path)
+    delete_storage_path(record.json_path)
+    delete_storage_path(record.chunk_path)
+    delete_storage_path(record.embedding_path)
     delete_s3_key(record.storage_key)
 
     record.is_active = False
@@ -474,7 +475,7 @@ def approve_document(db: Session, record: DocumentRecord, review_note: str | Non
         raise ValueError("삭제된 문서는 승인할 수 없습니다.")
 
     if record.parser_type == "faq_json":
-        payload = json.loads(Path(record.json_path).read_text(encoding="utf-8")) if record.json_path else []
+        payload = json.loads(read_text_from_storage(record.json_path) or "[]") if record.json_path else []
         for item in payload:
             _upsert_faq_from_payload(db, item)
         sync_faqs_to_file(db)
