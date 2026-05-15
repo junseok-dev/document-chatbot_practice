@@ -490,8 +490,8 @@ export default function AdminPage() {
                       {documentRows.map((doc) => (
                         <tr key={doc.id} className={doc.is_deleted ? 'bg-rose-50/40' : ''}>
                           <td className="px-3 py-3">
-                            <div className="font-medium text-slate-900">{doc.original_filename}</div>
-                            <div className="text-xs text-slate-500">{doc.logical_name}</div>
+                            <div className="font-medium text-slate-900">{doc.logical_name}</div>
+                            <div className="text-xs text-slate-500">{doc.original_filename}</div>
                           </td>
                           <td className="px-3 py-3">{doc.parser_type ?? '-'}</td>
                           <td className="px-3 py-3">{doc.status}</td>

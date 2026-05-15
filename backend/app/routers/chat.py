@@ -167,6 +167,12 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     elif is_greeting(request.message):
         answer = GREETING_ANSWER
         source = "faq"
+    elif btn := match_button_faq(request.message):
+        answer = btn
+        source = "faq"
+    elif gen := match_faq_general(request.message):
+        answer = gen
+        source = "faq"
     elif is_training_cost_query(request.message):
         answer = TRAINING_COST_ANSWER
         source = "faq"
@@ -175,12 +181,6 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         source = "faq"
     elif is_employment_rate_query(request.message):
         answer = EMPLOYMENT_RATE_ANSWER
-        source = "faq"
-    elif btn := match_button_faq(request.message):
-        answer = btn
-        source = "faq"
-    elif gen := match_faq_general(request.message):
-        answer = gen
         source = "faq"
     else:
         if is_guide_query(request.message):
@@ -211,7 +211,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
                 processing_status = "failed"
                 error_message = str(exc)
 
-    answer = format_chat_response(answer)
+    answer = format_chat_response(answer, max_bubbles=10 if source == "faq" else 3)
     save_message(db, request.session_id, "assistant", answer, source=source)
     db.add(
         ChatLog(
@@ -257,9 +257,9 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
         def _sse(data: dict) -> str:
             return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
-        async def _stream_static(text: str) -> None:
+        async def _stream_static(text: str, max_bubbles: int = 3) -> None:
             nonlocal full_answer
-            full_answer = format_chat_response(text)
+            full_answer = format_chat_response(text, max_bubbles=max_bubbles)
             bubbles = full_answer.split("\n\n")
             for bubble_index, bubble in enumerate(bubbles):
                 if bubble_index > 0:
@@ -290,6 +290,14 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
             source = "faq"
             async for chunk in _stream_static(GREETING_ANSWER):
                 yield chunk
+        elif btn := match_button_faq(request.message):
+            source = "faq"
+            async for chunk in _stream_static(btn, max_bubbles=10):
+                yield chunk
+        elif gen := match_faq_general(request.message):
+            source = "faq"
+            async for chunk in _stream_static(gen, max_bubbles=10):
+                yield chunk
         elif is_training_cost_query(request.message):
             source = "faq"
             async for chunk in _stream_static(TRAINING_COST_ANSWER):
@@ -301,14 +309,6 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
         elif is_employment_rate_query(request.message):
             source = "faq"
             async for chunk in _stream_static(EMPLOYMENT_RATE_ANSWER):
-                yield chunk
-        elif btn := match_button_faq(request.message):
-            source = "faq"
-            async for chunk in _stream_static(btn):
-                yield chunk
-        elif gen := match_faq_general(request.message):
-            source = "faq"
-            async for chunk in _stream_static(gen):
                 yield chunk
         else:
             if is_guide_query(request.message):
@@ -322,7 +322,7 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                     "궁금하신 내용을 구체적으로 질문해 주시면 더 정확하게 안내드릴게요!"
                 )
                 source = "faq"
-                async for chunk in _stream_static(static_text):
+                async for chunk in _stream_static(static_text, max_bubbles=10):
                     yield chunk
             else:
                 result = search_documents(request.message)

@@ -45,17 +45,17 @@ def _tokenize(text: str) -> set[str]:
 
 
 def _load_faq_json() -> dict:
-    remote = None
+    # 로컬 파일 우선 (git 배포 시 최신 데이터 반영)
+    if FAQ_PATH.exists():
+        return json.loads(FAQ_PATH.read_text(encoding="utf-8"))
     if get_settings().aws_s3_bucket:
         try:
             remote = read_text_from_storage(f"s3://{get_settings().aws_s3_bucket}/{FAQ_STORAGE_KEY}")
+            if remote:
+                return json.loads(remote)
         except Exception:
-            remote = None
-    if remote:
-        return json.loads(remote)
-    if not FAQ_PATH.exists():
-        return {"faqs": [], "suggested_questions": [], "categories": []}
-    return json.loads(FAQ_PATH.read_text(encoding="utf-8"))
+            pass
+    return {"faqs": [], "suggested_questions": [], "categories": []}
 
 
 def _serialize_faq(record: FaqRecord) -> dict:
@@ -127,10 +127,16 @@ def sync_faqs_to_file(db: Session) -> None:
         FAQ_PATH.unlink()
 
 
+_faq_seeded = False
+
+
 def _get_faq_data() -> dict:
+    global _faq_seeded
     db = SessionLocal()
     try:
-        seed_faqs(db)
+        if not _faq_seeded:
+            seed_faqs(db)
+            _faq_seeded = True
         rows = db.query(FaqRecord).filter(FaqRecord.is_active.is_(True)).order_by(FaqRecord.id.asc()).all()
         payload = _load_faq_json()
         payload["faqs"] = [_serialize_faq(row) for row in rows]
@@ -159,7 +165,6 @@ def _score_faq(query: str, faq: dict) -> float:
     score = 0.0
 
     question = faq.get("question", "")
-    normalized_question = _normalize(question)
     compact_question = _compact(question)
     question_tokens = _tokenize(question)
 
