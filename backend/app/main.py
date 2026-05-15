@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.db import models
 from app.db.database import SessionLocal, engine
+from app.db.migrations import migrate_database
 from app.routers import admin, chat
 from app.services.faq_service import seed_faqs
 from app.services.prompt_service import seed_prompt_configs, update_counseling_prompt
@@ -15,6 +16,7 @@ from app.services.rag_service import get_rag_service
 from app.services.storage_service import ensure_storage_dirs
 
 models.Base.metadata.create_all(bind=engine)
+migrate_database(engine)
 
 
 @asynccontextmanager

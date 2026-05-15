@@ -41,6 +41,11 @@ class DocumentRecord(Base):
     parser_type = Column(String(50), nullable=True)
     status = Column(String(30), index=True, default="uploaded", nullable=False)
     is_active = Column(Boolean, default=False, nullable=False)
+    is_deleted = Column(Boolean, default=False, nullable=False)
+    review_note = Column(Text, nullable=True)
+    approved_at = Column(DateTime(timezone=True), nullable=True)
+    rejected_at = Column(DateTime(timezone=True), nullable=True)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -121,3 +126,15 @@ class FaqRecord(Base):
     top_k = Column(Integer, default=4, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class AdminAuditLog(Base):
+    __tablename__ = "admin_audit_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    actor = Column(String(100), nullable=False, default="admin")
+    action = Column(String(50), index=True, nullable=False)
+    target_type = Column(String(50), index=True, nullable=False)
+    target_id = Column(String(100), nullable=True)
+    detail = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

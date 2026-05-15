@@ -12,15 +12,19 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db.crud import get_all_sessions, get_session_messages
 from app.db.database import get_db
-from app.db.models import ChatLog, ChatSession, DocumentRecord, FaqRecord, ProcessingLog, PromptConfig
+from app.db.models import AdminAuditLog, ChatLog, ChatSession, DocumentRecord, FaqRecord, ProcessingLog, PromptConfig
 from app.models.session import MessageDetail, SessionDetail, SessionSummary
 from app.services.admin_service import (
+    approve_document,
+    create_audit_log,
     full_reindex,
-    hard_delete_document,
     process_catalog_import,
     process_uploaded_faq_md,
     process_uploaded_md,
     process_uploaded_pdf,
+    reject_document,
+    restore_document,
+    soft_delete_document,
 )
 from app.services.faq_service import _serialize_faq, seed_faqs, sync_faqs_to_file
 from app.services.prompt_service import PROMPT_DEFAULTS, seed_prompt_configs, serialize_prompt
@@ -39,6 +43,10 @@ def verify_admin(x_admin_password: str = Header(...)):
 
 class PasswordChangeRequest(BaseModel):
     new_password: str
+
+
+class ReviewRequest(BaseModel):
+    note: str | None = None
 
 
 class FaqItemPayload(BaseModel):
@@ -69,6 +77,11 @@ def _serialize_document(record: DocumentRecord) -> dict:
         "status": record.status,
         "parser_type": record.parser_type,
         "is_active": record.is_active,
+        "is_deleted": getattr(record, "is_deleted", False),
+        "review_note": decrypt_if_needed(getattr(record, "review_note", None)),
+        "approved_at": getattr(record, "approved_at", None),
+        "rejected_at": getattr(record, "rejected_at", None),
+        "deleted_at": getattr(record, "deleted_at", None),
         "error_message": decrypt_if_needed(record.error_message),
         "created_at": record.created_at,
         "updated_at": record.updated_at,
@@ -116,6 +129,18 @@ def _serialize_chat_log(row: ChatLog) -> dict:
     }
 
 
+def _serialize_audit_log(row: AdminAuditLog) -> dict:
+    return {
+        "id": row.id,
+        "actor": row.actor,
+        "action": row.action,
+        "target_type": row.target_type,
+        "target_id": row.target_id,
+        "detail": decrypt_if_needed(row.detail),
+        "created_at": row.created_at,
+    }
+
+
 def _upsert_faq_row(db: Session, payload: FaqItemPayload) -> FaqRecord:
     row = db.query(FaqRecord).filter(FaqRecord.faq_key == payload.id).first()
     values = {
@@ -138,6 +163,7 @@ def _upsert_faq_row(db: Session, payload: FaqItemPayload) -> FaqRecord:
         db.add(row)
     db.commit()
     db.refresh(row)
+    create_audit_log(db, "faq_saved", "faq", payload.id, payload.question)
     return row
 
 
@@ -145,17 +171,7 @@ def _build_workbook(rows: list[dict]) -> bytes:
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "chat_logs"
-    headers = [
-        "session_id",
-        "question",
-        "answer",
-        "source",
-        "processing_status",
-        "embedding_cost",
-        "llm_cost",
-        "created_at",
-    ]
-    sheet.append(headers)
+    sheet.append(["session_id", "question", "answer", "source", "processing_status", "embedding_cost", "llm_cost", "created_at"])
     for row in rows:
         sheet.append(
             [
@@ -169,19 +185,13 @@ def _build_workbook(rows: list[dict]) -> bytes:
                 row["created_at"].isoformat() if row["created_at"] else "",
             ]
         )
-
     buffer = io.BytesIO()
     workbook.save(buffer)
     buffer.seek(0)
     return buffer.getvalue()
 
 
-def _filter_chat_logs(
-    db: Session,
-    start_date: date | None = None,
-    end_date: date | None = None,
-    session_id: str | None = None,
-) -> list[ChatLog]:
+def _filter_chat_logs(db: Session, start_date: date | None = None, end_date: date | None = None, session_id: str | None = None) -> list[ChatLog]:
     query = db.query(ChatLog)
     if start_date:
         query = query.filter(ChatLog.created_at >= datetime.combine(start_date, time.min))
@@ -193,12 +203,7 @@ def _filter_chat_logs(
 
 
 @router.get("/sessions", response_model=list[SessionSummary])
-def list_sessions(
-    skip: int = 0,
-    limit: int = 50,
-    db: Session = Depends(get_db),
-    _: None = Depends(verify_admin),
-):
+def list_sessions(skip: int = 0, limit: int = 50, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
     sessions = get_all_sessions(db, skip=skip, limit=limit)
     result = []
     for session in sessions:
@@ -213,7 +218,6 @@ def get_session_detail(session_id: str, db: Session = Depends(get_db), _: None =
     session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
-
     messages = get_session_messages(db, session_id)
     summary = SessionSummary.model_validate(session)
     summary.user_name = decrypt_if_needed(session.encrypted_user_name) if session.encrypted_user_name else None
@@ -226,75 +230,58 @@ def get_session_detail(session_id: str, db: Session = Depends(get_db), _: None =
 
 
 @router.post("/upload-md")
-async def upload_md(
-    file: UploadFile = File(...),
-    title: str = Form(None),
-    category: str = Form(None),
-    db: Session = Depends(get_db),
-    _: None = Depends(verify_admin),
-):
+async def upload_md(file: UploadFile = File(...), title: str = Form(None), category: str = Form(None), db: Session = Depends(get_db), _: None = Depends(verify_admin)):
     if not file.filename or not file.filename.lower().endswith(".md"):
         raise HTTPException(status_code=400, detail="MD 파일만 업로드할 수 있습니다.")
     record = await process_uploaded_md(db, file.filename, await file.read(), title=title, category=category)
-    return {"message": "MD 업로드와 인덱싱이 완료되었습니다.", "document": _serialize_document(record)}
+    return {"message": "MD 업로드 후 검토 대기 상태로 저장했습니다.", "document": _serialize_document(record)}
 
 
 @router.post("/upload-faq-md")
-async def upload_faq_md(
-    file: UploadFile = File(...),
-    category: str = Form(None),
-    db: Session = Depends(get_db),
-    _: None = Depends(verify_admin),
-):
+async def upload_faq_md(file: UploadFile = File(...), category: str = Form(None), db: Session = Depends(get_db), _: None = Depends(verify_admin)):
     if not file.filename or not file.filename.lower().endswith(".md"):
         raise HTTPException(status_code=400, detail="MD 파일만 업로드할 수 있습니다.")
     record, faq_items = await process_uploaded_faq_md(db, file.filename, await file.read(), category=category)
-    for item in faq_items:
-        _upsert_faq_row(db, FaqItemPayload(**item))
-    sync_faqs_to_file(db)
     return {
-        "message": "MD를 FAQ JSON으로 변환해 반영했습니다.",
+        "message": "FAQ 변환 결과를 생성했고, 아직 운영 반영 전입니다.",
         "document": _serialize_document(record),
         "faqs": faq_items,
     }
 
 
 @router.post("/import-catalog")
-async def import_catalog(
-    catalog: UploadFile = File(...),
-    files: list[UploadFile] = File(...),
-    db: Session = Depends(get_db),
-    _: None = Depends(verify_admin),
-):
+async def import_catalog(catalog: UploadFile = File(...), files: list[UploadFile] = File(...), db: Session = Depends(get_db), _: None = Depends(verify_admin)):
     if not catalog.filename or not catalog.filename.lower().endswith(".json"):
         raise HTTPException(status_code=400, detail="catalog는 JSON 파일이어야 합니다.")
     catalog_data = json.loads(await catalog.read())
     md_files = {f.filename: await f.read() for f in files if f.filename and f.filename.lower().endswith(".md")}
     records = await process_catalog_import(db, catalog_data, md_files)
-    return {"message": f"{len(records)}개 문서를 가져왔습니다.", "documents": [_serialize_document(r) for r in records]}
+    return {"message": f"{len(records)}개 문서를 검토 대기 상태로 가져왔습니다.", "documents": [_serialize_document(r) for r in records]}
 
 
 @router.post("/upload-pdf")
-async def upload_pdf(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    _: None = Depends(verify_admin),
-):
+async def upload_pdf(file: UploadFile = File(...), db: Session = Depends(get_db), _: None = Depends(verify_admin)):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="PDF 파일만 업로드할 수 있습니다.")
     record = await process_uploaded_pdf(db, file.filename, await file.read())
-    return {"message": "PDF 업로드와 MD 변환이 완료되었습니다.", "document": _serialize_document(record)}
+    return {"message": "PDF 업로드와 MD 변환이 완료되었고, 현재 검토 대기 상태입니다.", "document": _serialize_document(record)}
 
 
 @router.get("/documents")
 def list_documents(
     parser_type: str | None = Query(default=None),
+    include_deleted: bool = Query(default=False),
+    status: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: None = Depends(verify_admin),
 ):
     query = db.query(DocumentRecord).order_by(DocumentRecord.created_at.desc())
     if parser_type:
         query = query.filter(DocumentRecord.parser_type == parser_type)
+    if not include_deleted:
+        query = query.filter(DocumentRecord.is_deleted.is_(False))
+    if status:
+        query = query.filter(DocumentRecord.status == status)
     return {"documents": [_serialize_document(row) for row in query.all()]}
 
 
@@ -303,20 +290,43 @@ def get_document_detail(document_id: int, db: Session = Depends(get_db), _: None
     record = db.query(DocumentRecord).filter(DocumentRecord.id == document_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
-    return {
-        "document": _serialize_document(record),
-        "md_content": _read_optional_text(record.md_path),
-        "json_content": _read_optional_text(record.json_path),
-    }
+    return {"document": _serialize_document(record), "md_content": _read_optional_text(record.md_path), "json_content": _read_optional_text(record.json_path)}
 
 
-@router.delete("/documents/{document_id}")
-def delete_document(document_id: int, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+@router.post("/documents/{document_id}/approve")
+def approve_document_route(document_id: int, body: ReviewRequest, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
     record = db.query(DocumentRecord).filter(DocumentRecord.id == document_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
-    hard_delete_document(db, record)
-    return {"message": "문서를 삭제했습니다."}
+    updated = approve_document(db, record, body.note)
+    return {"message": "문서를 승인해 운영 데이터에 반영했습니다.", "document": _serialize_document(updated)}
+
+
+@router.post("/documents/{document_id}/reject")
+def reject_document_route(document_id: int, body: ReviewRequest, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    record = db.query(DocumentRecord).filter(DocumentRecord.id == document_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
+    updated = reject_document(db, record, body.note)
+    return {"message": "문서를 반려했습니다.", "document": _serialize_document(updated)}
+
+
+@router.post("/documents/{document_id}/restore")
+def restore_document_route(document_id: int, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    record = db.query(DocumentRecord).filter(DocumentRecord.id == document_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
+    updated = restore_document(db, record)
+    return {"message": "문서를 복구해 다시 검토 대기 상태로 돌렸습니다.", "document": _serialize_document(updated)}
+
+
+@router.delete("/documents/{document_id}")
+def delete_document(document_id: int, note: str | None = Query(default=None), db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    record = db.query(DocumentRecord).filter(DocumentRecord.id == document_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
+    updated = soft_delete_document(db, record, note)
+    return {"message": "문서를 삭제 처리했습니다.", "document": _serialize_document(updated)}
 
 
 @router.post("/documents/{document_id}/retry")
@@ -332,6 +342,7 @@ def retry_document(document_id: int, db: Session = Depends(get_db), _: None = De
 @router.post("/reindex")
 def reindex(db: Session = Depends(get_db), _: None = Depends(verify_admin)):
     full_reindex(db)
+    create_audit_log(db, "reindex", "system", "global", "full_rebuild")
     return {"message": "전체 인덱스를 다시 생성했습니다.", "strategy": "full_rebuild"}
 
 
@@ -351,12 +362,7 @@ def create_faq(body: FaqItemPayload, db: Session = Depends(get_db), _: None = De
 
 
 @router.put("/faqs/{faq_key}")
-def update_faq(
-    faq_key: str,
-    body: FaqItemPayload,
-    db: Session = Depends(get_db),
-    _: None = Depends(verify_admin),
-):
+def update_faq(faq_key: str, body: FaqItemPayload, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
     if faq_key != body.id:
         raise HTTPException(status_code=400, detail="FAQ 키가 일치하지 않습니다.")
     row = _upsert_faq_row(db, body)
@@ -374,6 +380,7 @@ def delete_faq(faq_key: str, db: Session = Depends(get_db), _: None = Depends(ve
     db.commit()
     sync_faqs_to_file(db)
     full_reindex(db)
+    create_audit_log(db, "faq_deleted", "faq", faq_key)
     return {"message": "FAQ를 삭제했습니다."}
 
 
@@ -393,16 +400,12 @@ def create_prompt(body: PromptPayload, db: Session = Depends(get_db), _: None = 
     db.add(row)
     db.commit()
     db.refresh(row)
+    create_audit_log(db, "prompt_created", "prompt", body.prompt_key, body.label)
     return {"message": "프롬프트를 추가했습니다.", "prompt": serialize_prompt(row)}
 
 
 @router.put("/prompts/{prompt_key}")
-def update_prompt(
-    prompt_key: str,
-    body: PromptPayload,
-    db: Session = Depends(get_db),
-    _: None = Depends(verify_admin),
-):
+def update_prompt(prompt_key: str, body: PromptPayload, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
     if prompt_key != body.prompt_key:
         raise HTTPException(status_code=400, detail="프롬프트 키가 일치하지 않습니다.")
     row = db.query(PromptConfig).filter(PromptConfig.prompt_key == prompt_key).first()
@@ -412,6 +415,7 @@ def update_prompt(
     row.content = encrypt(body.content)
     db.commit()
     db.refresh(row)
+    create_audit_log(db, "prompt_updated", "prompt", body.prompt_key, body.label)
     return {"message": "프롬프트를 수정했습니다.", "prompt": serialize_prompt(row)}
 
 
@@ -424,6 +428,7 @@ def delete_prompt(prompt_key: str, db: Session = Depends(get_db), _: None = Depe
         raise HTTPException(status_code=404, detail="프롬프트를 찾을 수 없습니다.")
     db.delete(row)
     db.commit()
+    create_audit_log(db, "prompt_deleted", "prompt", prompt_key)
     return {"message": "프롬프트를 삭제했습니다."}
 
 
@@ -431,51 +436,46 @@ def delete_prompt(prompt_key: str, db: Session = Depends(get_db), _: None = Depe
 def get_logs(limit: int = 100, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
     processing_logs = db.query(ProcessingLog).order_by(ProcessingLog.created_at.desc()).limit(limit).all()
     chat_logs = db.query(ChatLog).order_by(ChatLog.created_at.desc()).limit(limit).all()
+    audit_logs = db.query(AdminAuditLog).order_by(AdminAuditLog.created_at.desc()).limit(limit).all()
     return {
         "processing_logs": [_serialize_processing_log(row) for row in processing_logs],
         "chat_logs": [_serialize_chat_log(row) for row in chat_logs],
+        "audit_logs": [_serialize_audit_log(row) for row in audit_logs],
     }
 
 
+@router.get("/audit-logs")
+def get_audit_logs(limit: int = 100, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    rows = db.query(AdminAuditLog).order_by(AdminAuditLog.created_at.desc()).limit(limit).all()
+    return {"audit_logs": [_serialize_audit_log(row) for row in rows]}
+
+
 @router.get("/chat-logs")
-def list_chat_logs(
-    start_date: date | None = None,
-    end_date: date | None = None,
-    session_id: str | None = None,
-    db: Session = Depends(get_db),
-    _: None = Depends(verify_admin),
-):
+def list_chat_logs(start_date: date | None = None, end_date: date | None = None, session_id: str | None = None, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
     rows = _filter_chat_logs(db, start_date=start_date, end_date=end_date, session_id=session_id)
     return {"chat_logs": [_serialize_chat_log(row) for row in rows]}
 
 
 @router.get("/chat-logs/export")
-def export_chat_logs(
-    start_date: date | None = None,
-    end_date: date | None = None,
-    session_id: str | None = None,
-    db: Session = Depends(get_db),
-    _: None = Depends(verify_admin),
-):
+def export_chat_logs(start_date: date | None = None, end_date: date | None = None, session_id: str | None = None, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
     rows = [_serialize_chat_log(row) for row in _filter_chat_logs(db, start_date=start_date, end_date=end_date, session_id=session_id)]
     payload = _build_workbook(rows)
     filename = f"chat_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return Response(
         content=payload,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers=headers,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
 @router.put("/password")
-def change_password(body: PasswordChangeRequest, _: None = Depends(verify_admin)):
+def change_password(body: PasswordChangeRequest, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
     if not body.new_password or len(body.new_password) < 4:
         raise HTTPException(status_code=400, detail="비밀번호는 4자 이상이어야 합니다.")
-
     lines = ENV_PATH.read_text(encoding="utf-8").splitlines() if ENV_PATH.exists() else []
     updated = [line for line in lines if not line.startswith("ADMIN_PASSWORD=")]
     updated.append(f"ADMIN_PASSWORD={body.new_password}")
     ENV_PATH.write_text("\n".join(updated) + "\n", encoding="utf-8")
     get_settings.cache_clear()
+    create_audit_log(db, "password_changed", "system", "admin_password")
     return {"message": "비밀번호를 변경했습니다."}

@@ -6,6 +6,7 @@ import {
   AdminDocumentDetail,
   AdminFaq,
   AdminSession,
+  AuditLog,
   ChatLog,
   ProcessingLog,
   PromptConfig,
@@ -35,15 +36,11 @@ const EMPTY_PROMPT: PromptPayload = {
 
 const INPUT_CLASS =
   'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100';
-
 const TEXTAREA_CLASS =
   'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100';
 
 function splitCsv(value: string): string[] {
-  return value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
+  return value.split(',').map((item) => item.trim()).filter(Boolean);
 }
 
 function joinCsv(values: string[]): string {
@@ -72,9 +69,11 @@ export default function AdminPage() {
   const [faqs, setFaqs] = useState<AdminFaq[]>([]);
   const [processingLogs, setProcessingLogs] = useState<ProcessingLog[]>([]);
   const [chatLogs, setChatLogs] = useState<ChatLog[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   const [selectedDocument, setSelectedDocument] = useState<AdminDocumentDetail | null>(null);
   const [documentLoading, setDocumentLoading] = useState(false);
+  const [reviewNote, setReviewNote] = useState('');
 
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [mdFile, setMdFile] = useState<File | null>(null);
@@ -132,6 +131,7 @@ export default function AdminPage() {
       setPrompts(promptData.prompts);
       setProcessingLogs(logData.processing_logs);
       setChatLogs(logData.chat_logs);
+      setAuditLogs(logData.audit_logs);
     } catch {
       setLoadError('관리자 데이터를 불러오지 못했습니다.');
     } finally {
@@ -140,9 +140,7 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
-    if (authenticated) {
-      void loadDashboard();
-    }
+    if (authenticated) void loadDashboard();
   }, [authenticated]);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -168,9 +166,15 @@ export default function AdminPage() {
     try {
       const detail = await adminApi.getDocumentDetail(documentId);
       setSelectedDocument(detail);
+      setReviewNote(detail.document.review_note ?? '');
     } finally {
       setDocumentLoading(false);
     }
+  };
+
+  const reloadAndOpenDocument = async (documentId: number) => {
+    await loadDashboard();
+    await openDocument(documentId);
   };
 
   const handlePdfUpload = async () => {
@@ -181,8 +185,7 @@ export default function AdminPage() {
       setNotice(result.message);
       setPdfFile(null);
       if (pdfInputRef.current) pdfInputRef.current.value = '';
-      await loadDashboard();
-      await openDocument(result.document.id);
+      await reloadAndOpenDocument(result.document.id);
     } catch {
       setNotice('PDF 업로드에 실패했습니다.');
     } finally {
@@ -200,8 +203,7 @@ export default function AdminPage() {
       setMdTitle('');
       setMdCategory('');
       if (mdInputRef.current) mdInputRef.current.value = '';
-      await loadDashboard();
-      await openDocument(result.document.id);
+      await reloadAndOpenDocument(result.document.id);
     } catch {
       setNotice('MD 업로드에 실패했습니다.');
     } finally {
@@ -218,10 +220,7 @@ export default function AdminPage() {
       setFaqMdFile(null);
       setFaqMdCategory('');
       if (faqMdInputRef.current) faqMdInputRef.current.value = '';
-      setFaqs(result.faqs);
-      await loadDashboard();
-      await openDocument(result.document.id);
-      setActiveTab('faqs');
+      await reloadAndOpenDocument(result.document.id);
     } catch {
       setNotice('FAQ용 MD 변환에 실패했습니다.');
     } finally {
@@ -229,14 +228,34 @@ export default function AdminPage() {
     }
   };
 
-  const handleDeleteDocument = async (documentId: number) => {
-    if (!window.confirm('이 문서를 삭제할까요?')) return;
-    await adminApi.deleteDocument(documentId);
-    setNotice('문서를 삭제했습니다.');
-    if (selectedDocument?.document.id === documentId) {
-      setSelectedDocument(null);
-    }
+  const handleDocumentApprove = async () => {
+    if (!selectedDocument) return;
+    const result = await adminApi.approveDocument(selectedDocument.document.id, reviewNote || undefined);
+    setNotice(result.message);
+    await reloadAndOpenDocument(selectedDocument.document.id);
+  };
+
+  const handleDocumentReject = async () => {
+    if (!selectedDocument) return;
+    const result = await adminApi.rejectDocument(selectedDocument.document.id, reviewNote || undefined);
+    setNotice(result.message);
+    await reloadAndOpenDocument(selectedDocument.document.id);
+  };
+
+  const handleDocumentDelete = async (documentId: number) => {
+    if (!window.confirm('이 문서를 삭제 처리할까요?')) return;
+    const note = selectedDocument?.document.id === documentId ? reviewNote : undefined;
+    const result = await adminApi.deleteDocument(documentId, note);
+    setNotice(result.message);
+    if (selectedDocument?.document.id === documentId) setSelectedDocument(null);
     await loadDashboard();
+  };
+
+  const handleDocumentRestore = async () => {
+    if (!selectedDocument) return;
+    const result = await adminApi.restoreDocument(selectedDocument.document.id);
+    setNotice(result.message);
+    await reloadAndOpenDocument(selectedDocument.document.id);
   };
 
   const handleSelectFaq = (faq: AdminFaq) => {
@@ -256,7 +275,6 @@ export default function AdminPage() {
       search_hints: splitCsv(faqSearchHints),
       source_files: splitCsv(faqSourceFiles),
     };
-
     try {
       const result = faqForm.id ? await adminApi.updateFaq(payload) : await adminApi.createFaq(payload);
       setNotice(result.message);
@@ -278,19 +296,16 @@ export default function AdminPage() {
   };
 
   const handleSelectPrompt = (prompt: PromptConfig) => {
-    setPromptForm({
-      prompt_key: prompt.prompt_key,
-      label: prompt.label,
-      content: prompt.content,
-    });
+    setPromptForm({ prompt_key: prompt.prompt_key, label: prompt.label, content: prompt.content });
   };
 
   const handleSavePrompt = async () => {
     setPromptSaving(true);
     try {
-      const result = promptForm.prompt_key && prompts.some((item) => item.prompt_key === promptForm.prompt_key)
-        ? await adminApi.updatePrompt(promptForm)
-        : await adminApi.createPrompt(promptForm);
+      const result =
+        promptForm.prompt_key && prompts.some((item) => item.prompt_key === promptForm.prompt_key)
+          ? await adminApi.updatePrompt(promptForm)
+          : await adminApi.createPrompt(promptForm);
       setNotice(result.message);
       resetPromptForm();
       await loadDashboard();
@@ -349,12 +364,12 @@ export default function AdminPage() {
     }
   };
 
-  const latestFailed = useMemo(() => documents.find((item) => item.status === 'failed'), [documents]);
-
   const documentRows = useMemo(
     () => [...documents].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
     [documents],
   );
+
+  const reviewCount = useMemo(() => documents.filter((doc) => doc.status === 'review' && !doc.is_deleted).length, [documents]);
 
   if (!authenticated) {
     return (
@@ -362,22 +377,11 @@ export default function AdminPage() {
         <div className="mx-auto flex min-h-screen max-w-md items-center px-6">
           <form onSubmit={handleLogin} className="w-full rounded-3xl border border-cyan-100 bg-white/95 p-8 shadow-xl shadow-cyan-100/50">
             <h1 className="text-2xl font-semibold text-slate-900">관리자 로그인</h1>
-            <p className="mt-2 text-sm text-slate-500">운영 데이터는 복호화된 화면으로만 확인할 수 있습니다.</p>
+            <p className="mt-2 text-sm text-slate-500">운영 데이터는 관리자 화면에서만 복호화해 확인합니다.</p>
             <div className="mt-6 space-y-3">
-              <input
-                type="password"
-                value={passwordInput}
-                onChange={(e) => setPasswordInput(e.target.value)}
-                placeholder="관리자 비밀번호"
-                className={INPUT_CLASS}
-                autoFocus
-              />
+              <input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} placeholder="관리자 비밀번호" className={INPUT_CLASS} autoFocus />
               {loginError && <p className="text-sm text-rose-600">{loginError}</p>}
-              <button
-                type="submit"
-                disabled={loginLoading || !passwordInput.trim()}
-                className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
-              >
+              <button type="submit" disabled={loginLoading || !passwordInput.trim()} className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white disabled:opacity-50">
                 {loginLoading ? '확인 중...' : '로그인'}
               </button>
             </div>
@@ -394,25 +398,14 @@ export default function AdminPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-sm uppercase tracking-[0.28em] text-cyan-200">Operator Console</p>
-              <h1 className="mt-2 text-3xl font-semibold">문서, FAQ, 프롬프트, 대화 데이터를 한 화면에서 관리합니다.</h1>
-              <p className="mt-2 max-w-3xl text-sm text-cyan-50/85">
-                데이터베이스에는 암호화된 값이 저장되고, 관리자 화면에서만 복호화된 값을 조회합니다.
-              </p>
+              <h1 className="mt-2 text-3xl font-semibold">승인형 운영 흐름으로 문서, FAQ, 프롬프트, 대화 데이터를 관리합니다.</h1>
+              <p className="mt-2 max-w-3xl text-sm text-cyan-50/85">검토 대기 문서 {reviewCount}건. 승인 전까지는 운영 검색/RAG에 반영되지 않습니다.</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => void loadDashboard()}
-                className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20"
-              >
+              <button onClick={() => void loadDashboard()} className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20">
                 새로고침
               </button>
-              <button
-                onClick={() => {
-                  clearAdminPassword();
-                  setAuthenticated(false);
-                }}
-                className="rounded-xl bg-white px-4 py-2 text-sm font-medium text-slate-900 transition hover:bg-cyan-50"
-              >
+              <button onClick={() => { clearAdminPassword(); setAuthenticated(false); }} className="rounded-xl bg-white px-4 py-2 text-sm font-medium text-slate-900">
                 로그아웃
               </button>
             </div>
@@ -421,18 +414,12 @@ export default function AdminPage() {
 
         <div className="mt-4 flex flex-wrap gap-2">
           {([
-            ['documents', '문서 관리'],
+            ['documents', '문서 검토'],
             ['faqs', 'FAQ 관리'],
             ['prompts', '프롬프트'],
-            ['chats', '대화/내보내기'],
+            ['chats', '로그/내보내기'],
           ] as [TabKey, string][]).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                activeTab === key ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 hover:bg-slate-200'
-              }`}
-            >
+            <button key={key} onClick={() => setActiveTab(key)} className={`rounded-full px-4 py-2 text-sm font-medium ${activeTab === key ? 'bg-slate-900 text-white' : 'bg-white text-slate-600'}`}>
               {label}
             </button>
           ))}
@@ -448,42 +435,35 @@ export default function AdminPage() {
           <div className="mt-6 grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
             <div className="space-y-6">
               <section className="rounded-3xl bg-white p-6 shadow-sm">
-                <h2 className="text-lg font-semibold text-slate-900">문서 업로드와 변환</h2>
+                <h2 className="text-lg font-semibold text-slate-900">업로드와 변환</h2>
                 <div className="mt-5 grid gap-4 lg:grid-cols-3">
                   <div className="rounded-2xl border border-slate-200 p-4">
                     <h3 className="text-sm font-semibold text-slate-900">PDF → MD</h3>
-                    <p className="mt-1 text-xs text-slate-500">PDF를 업로드하면 MD로 구조화하고 인덱싱합니다.</p>
+                    <p className="mt-1 text-xs text-slate-500">변환 결과를 만든 뒤 검토 대기 상태로 저장합니다.</p>
                     <input ref={pdfInputRef} type="file" accept=".pdf" className="mt-4 block w-full text-sm" onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)} />
-                    <button onClick={handlePdfUpload} disabled={!pdfFile || uploadBusy} className="mt-4 w-full rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
-                      업로드
-                    </button>
+                    <button onClick={handlePdfUpload} disabled={!pdfFile || uploadBusy} className="mt-4 w-full rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">업로드</button>
                   </div>
                   <div className="rounded-2xl border border-slate-200 p-4">
-                    <h3 className="text-sm font-semibold text-slate-900">MD 일반 문서 등록</h3>
-                    <p className="mt-1 text-xs text-slate-500">일반 데이터는 MD 그대로 관리합니다.</p>
+                    <h3 className="text-sm font-semibold text-slate-900">일반 MD 등록</h3>
+                    <p className="mt-1 text-xs text-slate-500">문서형 데이터는 승인 후에만 검색에 반영됩니다.</p>
                     <input ref={mdInputRef} type="file" accept=".md" className="mt-4 block w-full text-sm" onChange={(e) => setMdFile(e.target.files?.[0] ?? null)} />
                     <input value={mdTitle} onChange={(e) => setMdTitle(e.target.value)} placeholder="문서 제목" className={`${INPUT_CLASS} mt-3`} />
                     <input value={mdCategory} onChange={(e) => setMdCategory(e.target.value)} placeholder="카테고리" className={`${INPUT_CLASS} mt-3`} />
-                    <button onClick={handleMdUpload} disabled={!mdFile || uploadBusy} className="mt-4 w-full rounded-xl bg-cyan-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
-                      등록
-                    </button>
+                    <button onClick={handleMdUpload} disabled={!mdFile || uploadBusy} className="mt-4 w-full rounded-xl bg-cyan-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">등록</button>
                   </div>
                   <div className="rounded-2xl border border-slate-200 p-4">
                     <h3 className="text-sm font-semibold text-slate-900">MD → FAQ JSON</h3>
-                    <p className="mt-1 text-xs text-slate-500">FAQ성 문서는 JSON으로 변환한 뒤 FAQ DB에 반영합니다.</p>
+                    <p className="mt-1 text-xs text-slate-500">변환된 FAQ는 승인 전까지 실제 FAQ DB에 반영되지 않습니다.</p>
                     <input ref={faqMdInputRef} type="file" accept=".md" className="mt-4 block w-full text-sm" onChange={(e) => setFaqMdFile(e.target.files?.[0] ?? null)} />
                     <input value={faqMdCategory} onChange={(e) => setFaqMdCategory(e.target.value)} placeholder="FAQ 카테고리" className={`${INPUT_CLASS} mt-3`} />
-                    <button onClick={handleFaqMdUpload} disabled={!faqMdFile || uploadBusy} className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
-                      변환 후 반영
-                    </button>
+                    <button onClick={handleFaqMdUpload} disabled={!faqMdFile || uploadBusy} className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">변환 생성</button>
                   </div>
                 </div>
-                {latestFailed && <p className="mt-4 text-sm text-rose-600">최근 실패 문서: {latestFailed.original_filename} / {latestFailed.error_message}</p>}
               </section>
 
               <section className="rounded-3xl bg-white p-6 shadow-sm">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-slate-900">업로드된 문서</h2>
+                  <h2 className="text-lg font-semibold text-slate-900">문서 목록</h2>
                   <span className="text-sm text-slate-500">{loading ? '불러오는 중...' : `${documentRows.length}건`}</span>
                 </div>
                 <div className="mt-4 overflow-x-auto">
@@ -500,7 +480,7 @@ export default function AdminPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {documentRows.map((doc) => (
-                        <tr key={doc.id}>
+                        <tr key={doc.id} className={doc.is_deleted ? 'bg-rose-50/40' : ''}>
                           <td className="px-3 py-3">
                             <div className="font-medium text-slate-900">{doc.original_filename}</div>
                             <div className="text-xs text-slate-500">{doc.logical_name}</div>
@@ -511,12 +491,8 @@ export default function AdminPage() {
                           <td className="px-3 py-3">{formatDate(doc.created_at)}</td>
                           <td className="px-3 py-3">
                             <div className="flex gap-2">
-                              <button onClick={() => void openDocument(doc.id)} className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white">
-                                조회
-                              </button>
-                              <button onClick={() => void handleDeleteDocument(doc.id)} className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700">
-                                삭제
-                              </button>
+                              <button onClick={() => void openDocument(doc.id)} className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white">조회</button>
+                              <button onClick={() => void handleDocumentDelete(doc.id)} className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700">삭제</button>
                             </div>
                           </td>
                         </tr>
@@ -529,31 +505,41 @@ export default function AdminPage() {
 
             <section className="rounded-3xl bg-white p-6 shadow-sm">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-slate-900">문서 상세</h2>
+                <h2 className="text-lg font-semibold text-slate-900">검토 패널</h2>
                 {documentLoading && <span className="text-sm text-slate-500">불러오는 중...</span>}
               </div>
               {!selectedDocument ? (
-                <p className="mt-6 text-sm text-slate-500">오른쪽 패널에는 선택한 문서의 MD/JSON 결과가 표시됩니다.</p>
+                <p className="mt-6 text-sm text-slate-500">문서를 선택하면 변환 결과와 승인 액션이 표시됩니다.</p>
               ) : (
                 <div className="mt-4 space-y-5">
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <div className="text-sm font-semibold text-slate-900">{selectedDocument.document.original_filename}</div>
                     <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-600">
-                      <span>상태</span>
-                      <span>{selectedDocument.document.status}</span>
-                      <span>타입</span>
-                      <span>{selectedDocument.document.parser_type ?? '-'}</span>
-                      <span>생성일</span>
-                      <span>{formatDate(selectedDocument.document.created_at)}</span>
+                      <span>상태</span><span>{selectedDocument.document.status}</span>
+                      <span>타입</span><span>{selectedDocument.document.parser_type ?? '-'}</span>
+                      <span>활성</span><span>{selectedDocument.document.is_active ? 'Y' : 'N'}</span>
+                      <span>삭제</span><span>{selectedDocument.document.is_deleted ? 'Y' : 'N'}</span>
+                      <span>승인 시각</span><span>{formatDate(selectedDocument.document.approved_at)}</span>
+                      <span>반려 시각</span><span>{formatDate(selectedDocument.document.rejected_at)}</span>
                     </div>
                   </div>
                   <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-900">검토 메모</label>
+                    <textarea value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} className={`${TEXTAREA_CLASS} h-24`} placeholder="승인/반려/삭제 사유를 남겨두세요." />
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <button onClick={() => void handleDocumentApprove()} disabled={selectedDocument.document.is_deleted} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">승인</button>
+                    <button onClick={() => void handleDocumentReject()} disabled={selectedDocument.document.is_deleted} className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">반려</button>
+                    <button onClick={() => void handleDocumentDelete(selectedDocument.document.id)} className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-medium text-white">삭제</button>
+                    <button onClick={() => void handleDocumentRestore()} disabled={!selectedDocument.document.is_deleted} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-50">복구</button>
+                  </div>
+                  <div>
                     <h3 className="mb-2 text-sm font-semibold text-slate-900">MD 미리보기</h3>
-                    <textarea readOnly value={selectedDocument.md_content ?? ''} className="h-64 w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 font-mono text-xs text-slate-700" />
+                    <textarea readOnly value={selectedDocument.md_content ?? ''} className="h-56 w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 font-mono text-xs text-slate-700" />
                   </div>
                   <div>
                     <h3 className="mb-2 text-sm font-semibold text-slate-900">JSON 미리보기</h3>
-                    <textarea readOnly value={selectedDocument.json_content ?? ''} className="h-64 w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 font-mono text-xs text-slate-700" />
+                    <textarea readOnly value={selectedDocument.json_content ?? ''} className="h-56 w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 font-mono text-xs text-slate-700" />
                   </div>
                 </div>
               )}
@@ -566,9 +552,7 @@ export default function AdminPage() {
             <section className="rounded-3xl bg-white p-6 shadow-sm">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-slate-900">FAQ 목록</h2>
-                <button onClick={resetFaqForm} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-medium text-white">
-                  새 FAQ
-                </button>
+                <button onClick={resetFaqForm} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-medium text-white">새 FAQ</button>
               </div>
               <div className="mt-4 max-h-[720px] space-y-3 overflow-y-auto">
                 {faqs.map((faq) => (
@@ -580,52 +564,35 @@ export default function AdminPage() {
                         <p className="mt-2 line-clamp-3 text-sm text-slate-600">{faq.answer}</p>
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={() => handleSelectFaq(faq)} className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white">
-                          수정
-                        </button>
-                        <button onClick={() => void handleDeleteFaq(faq.id)} className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700">
-                          삭제
-                        </button>
+                        <button onClick={() => handleSelectFaq(faq)} className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white">수정</button>
+                        <button onClick={() => void handleDeleteFaq(faq.id)} className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700">삭제</button>
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
             </section>
-
             <section className="rounded-3xl bg-white p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-900">{faqForm.id ? 'FAQ 수정' : 'FAQ 추가'}</h2>
               <div className="mt-4 space-y-4">
-                <input value={faqForm.id} onChange={(e) => setFaqForm((current) => ({ ...current, id: e.target.value }))} placeholder="FAQ ID (새로 만들 때만 입력)" className={INPUT_CLASS} />
+                <input value={faqForm.id} onChange={(e) => setFaqForm((current) => ({ ...current, id: e.target.value }))} placeholder="FAQ ID" className={INPUT_CLASS} />
                 <input value={faqForm.category} onChange={(e) => setFaqForm((current) => ({ ...current, category: e.target.value }))} placeholder="카테고리" className={INPUT_CLASS} />
                 <input value={faqForm.question} onChange={(e) => setFaqForm((current) => ({ ...current, question: e.target.value }))} placeholder="질문" className={INPUT_CLASS} />
                 <textarea value={faqForm.answer} onChange={(e) => setFaqForm((current) => ({ ...current, answer: e.target.value }))} placeholder="답변" className={`${TEXTAREA_CLASS} h-40`} />
-                <input value={faqKeywords} onChange={(e) => setFaqKeywords(e.target.value)} placeholder="키워드(쉼표 구분)" className={INPUT_CLASS} />
-                <input value={faqAliases} onChange={(e) => setFaqAliases(e.target.value)} placeholder="별칭(쉼표 구분)" className={INPUT_CLASS} />
-                <input value={faqSearchHints} onChange={(e) => setFaqSearchHints(e.target.value)} placeholder="검색 힌트(쉼표 구분)" className={INPUT_CLASS} />
-                <input value={faqSourceFiles} onChange={(e) => setFaqSourceFiles(e.target.value)} placeholder="연결 문서 logical_name(쉼표 구분)" className={INPUT_CLASS} />
+                <input value={faqKeywords} onChange={(e) => setFaqKeywords(e.target.value)} placeholder="키워드" className={INPUT_CLASS} />
+                <input value={faqAliases} onChange={(e) => setFaqAliases(e.target.value)} placeholder="별칭" className={INPUT_CLASS} />
+                <input value={faqSearchHints} onChange={(e) => setFaqSearchHints(e.target.value)} placeholder="검색 힌트" className={INPUT_CLASS} />
+                <input value={faqSourceFiles} onChange={(e) => setFaqSourceFiles(e.target.value)} placeholder="source_files" className={INPUT_CLASS} />
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="flex items-center gap-2 text-sm text-slate-700">
                     <input type="checkbox" checked={faqForm.direct_answer} onChange={(e) => setFaqForm((current) => ({ ...current, direct_answer: e.target.checked }))} />
-                    direct answer 사용
+                    direct_answer
                   </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={10}
-                    value={faqForm.top_k}
-                    onChange={(e) => setFaqForm((current) => ({ ...current, top_k: Number(e.target.value) || 4 }))}
-                    placeholder="top_k"
-                    className={INPUT_CLASS}
-                  />
+                  <input type="number" min={1} max={10} value={faqForm.top_k} onChange={(e) => setFaqForm((current) => ({ ...current, top_k: Number(e.target.value) || 4 }))} className={INPUT_CLASS} />
                 </div>
                 <div className="flex gap-3">
-                  <button onClick={() => void handleSaveFaq()} disabled={faqSaving || !faqForm.id || !faqForm.question || !faqForm.answer} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
-                    {faqSaving ? '저장 중...' : faqForm.id && faqs.some((item) => item.id === faqForm.id) ? '수정 저장' : 'FAQ 추가'}
-                  </button>
-                  <button onClick={resetFaqForm} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">
-                    초기화
-                  </button>
+                  <button onClick={() => void handleSaveFaq()} disabled={faqSaving || !faqForm.id || !faqForm.question || !faqForm.answer} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{faqSaving ? '저장 중...' : '저장'}</button>
+                  <button onClick={resetFaqForm} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">초기화</button>
                 </div>
               </div>
             </section>
@@ -637,9 +604,7 @@ export default function AdminPage() {
             <section className="rounded-3xl bg-white p-6 shadow-sm">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-slate-900">프롬프트 목록</h2>
-                <button onClick={resetPromptForm} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-medium text-white">
-                  새 프롬프트
-                </button>
+                <button onClick={resetPromptForm} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-medium text-white">새 프롬프트</button>
               </div>
               <div className="mt-4 max-h-[720px] space-y-3 overflow-y-auto">
                 {prompts.map((prompt) => (
@@ -651,19 +616,14 @@ export default function AdminPage() {
                         <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm text-slate-600">{prompt.content}</p>
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={() => handleSelectPrompt(prompt)} className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white">
-                          수정
-                        </button>
-                        <button onClick={() => void handleDeletePrompt(prompt.prompt_key)} className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700">
-                          삭제
-                        </button>
+                        <button onClick={() => handleSelectPrompt(prompt)} className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white">수정</button>
+                        <button onClick={() => void handleDeletePrompt(prompt.prompt_key)} className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700">삭제</button>
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
             </section>
-
             <section className="rounded-3xl bg-white p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-900">{promptForm.prompt_key && prompts.some((item) => item.prompt_key === promptForm.prompt_key) ? '프롬프트 수정' : '프롬프트 추가'}</h2>
               <div className="mt-4 space-y-4">
@@ -671,12 +631,8 @@ export default function AdminPage() {
                 <input value={promptForm.label} onChange={(e) => setPromptForm((current) => ({ ...current, label: e.target.value }))} placeholder="라벨" className={INPUT_CLASS} />
                 <textarea value={promptForm.content} onChange={(e) => setPromptForm((current) => ({ ...current, content: e.target.value }))} placeholder="프롬프트 본문" className={`${TEXTAREA_CLASS} h-[420px]`} />
                 <div className="flex gap-3">
-                  <button onClick={() => void handleSavePrompt()} disabled={promptSaving || !promptForm.prompt_key || !promptForm.label || !promptForm.content} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
-                    {promptSaving ? '저장 중...' : '저장'}
-                  </button>
-                  <button onClick={resetPromptForm} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">
-                    초기화
-                  </button>
+                  <button onClick={() => void handleSavePrompt()} disabled={promptSaving || !promptForm.prompt_key || !promptForm.label || !promptForm.content} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{promptSaving ? '저장 중...' : '저장'}</button>
+                  <button onClick={resetPromptForm} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">초기화</button>
                 </div>
               </div>
             </section>
@@ -692,12 +648,8 @@ export default function AdminPage() {
                 <input type="date" value={chatEndDate} onChange={(e) => setChatEndDate(e.target.value)} className={INPUT_CLASS} />
                 <input value={chatSessionId} onChange={(e) => setChatSessionId(e.target.value)} placeholder="세션 ID" className={INPUT_CLASS} />
                 <div className="flex gap-2">
-                  <button onClick={() => void handleFilterChatLogs()} disabled={chatLoading} className="flex-1 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
-                    조회
-                  </button>
-                  <button onClick={() => void handleExportChatLogs()} disabled={chatExporting} className="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
-                    엑셀
-                  </button>
+                  <button onClick={() => void handleFilterChatLogs()} disabled={chatLoading} className="flex-1 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">조회</button>
+                  <button onClick={() => void handleExportChatLogs()} disabled={chatExporting} className="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">엑셀</button>
                 </div>
               </div>
               <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto">
@@ -711,7 +663,6 @@ export default function AdminPage() {
                     </div>
                     <div className="mt-2 font-medium text-slate-900">{log.question}</div>
                     <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{log.answer}</p>
-                    {log.error && <p className="mt-2 text-sm text-rose-600">{log.error}</p>}
                   </div>
                 ))}
               </div>
@@ -723,9 +674,7 @@ export default function AdminPage() {
                 <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto">
                   {processingLogs.map((log) => (
                     <div key={log.id} className="rounded-2xl border border-slate-200 p-4">
-                      <div className="text-sm font-medium text-slate-900">
-                        {log.status} / {log.message}
-                      </div>
+                      <div className="text-sm font-medium text-slate-900">{log.status} / {log.message}</div>
                       <div className="mt-1 text-xs text-slate-500">{formatDate(log.created_at)}</div>
                       {log.detail && <p className="mt-2 text-sm text-rose-600">{log.detail}</p>}
                     </div>
@@ -734,40 +683,51 @@ export default function AdminPage() {
               </section>
 
               <section className="rounded-3xl bg-white p-6 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-slate-900">상담 세션</h2>
-                  <span className="text-sm text-slate-500">{sessions.length}건</span>
-                </div>
-                <div className="mt-4 overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead className="bg-slate-50 text-left text-slate-500">
-                      <tr>
-                        <th className="px-3 py-3">사용자</th>
-                        <th className="px-3 py-3">시작</th>
-                        <th className="px-3 py-3">최근</th>
-                        <th className="px-3 py-3">메시지</th>
-                        <th className="px-3 py-3">상세</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {sessions.map((session) => (
-                        <tr key={session.id}>
-                          <td className="px-3 py-3">{session.user_name ?? '익명'}</td>
-                          <td className="px-3 py-3">{formatDate(session.created_at)}</td>
-                          <td className="px-3 py-3">{formatDate(session.updated_at)}</td>
-                          <td className="px-3 py-3">{session.message_count}</td>
-                          <td className="px-3 py-3">
-                            <button onClick={() => navigate(`/admin/sessions/${session.id}`)} className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white">
-                              보기
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <h2 className="text-lg font-semibold text-slate-900">감사 로그</h2>
+                <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto">
+                  {auditLogs.map((log) => (
+                    <div key={log.id} className="rounded-2xl border border-slate-200 p-4">
+                      <div className="text-sm font-medium text-slate-900">{log.action}</div>
+                      <div className="mt-1 text-xs text-slate-500">{log.target_type} / {log.target_id ?? '-'} / {formatDate(log.created_at)}</div>
+                      {log.detail && <p className="mt-2 text-sm text-slate-700">{log.detail}</p>}
+                    </div>
+                  ))}
                 </div>
               </section>
             </div>
+
+            <section className="rounded-3xl bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-slate-900">상담 세션</h2>
+                <span className="text-sm text-slate-500">{sessions.length}건</span>
+              </div>
+              <div className="mt-4 overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 text-left text-slate-500">
+                    <tr>
+                      <th className="px-3 py-3">사용자</th>
+                      <th className="px-3 py-3">시작</th>
+                      <th className="px-3 py-3">최근</th>
+                      <th className="px-3 py-3">메시지</th>
+                      <th className="px-3 py-3">상세</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {sessions.map((session) => (
+                      <tr key={session.id}>
+                        <td className="px-3 py-3">{session.user_name ?? '익명'}</td>
+                        <td className="px-3 py-3">{formatDate(session.created_at)}</td>
+                        <td className="px-3 py-3">{formatDate(session.updated_at)}</td>
+                        <td className="px-3 py-3">{session.message_count}</td>
+                        <td className="px-3 py-3">
+                          <button onClick={() => navigate(`/admin/sessions/${session.id}`)} className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white">보기</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </div>
         )}
       </div>

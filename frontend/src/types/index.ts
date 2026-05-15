@@ -63,6 +63,11 @@ export interface AdminDocument {
   status: 'uploaded' | 'parsing' | 'embedding' | 'ready' | 'failed' | 'deleted';
   parser_type: string | null;
   is_active: boolean;
+  is_deleted: boolean;
+  review_note: string | null;
+  approved_at: string | null;
+  rejected_at: string | null;
+  deleted_at: string | null;
   error_message: string | null;
   created_at: string;
   updated_at: string | null;
@@ -103,6 +108,16 @@ export interface ProcessingLog {
   log_type: string;
   status: string;
   message: string;
+  detail: string | null;
+  created_at: string;
+}
+
+export interface AuditLog {
+  id: number;
+  actor: string;
+  action: string;
+  target_type: string;
+  target_id: string | null;
   detail: string | null;
   created_at: string;
 }

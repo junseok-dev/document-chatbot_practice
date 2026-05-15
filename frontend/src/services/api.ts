@@ -4,6 +4,7 @@ import {
   AdminDocumentDetail,
   AdminFaq,
   AdminSession,
+  AuditLog,
   AdminSessionDetail,
   ChatLog,
   ChatResponse,
@@ -162,8 +163,23 @@ export const adminApi = {
     return response.data;
   },
 
-  deleteDocument: async (documentId: number): Promise<{ message: string }> => {
-    const response = await adminApiClient.delete(`/admin/documents/${documentId}`);
+  approveDocument: async (documentId: number, note?: string): Promise<{ message: string; document: AdminDocument }> => {
+    const response = await adminApiClient.post(`/admin/documents/${documentId}/approve`, { note });
+    return response.data;
+  },
+
+  rejectDocument: async (documentId: number, note?: string): Promise<{ message: string; document: AdminDocument }> => {
+    const response = await adminApiClient.post(`/admin/documents/${documentId}/reject`, { note });
+    return response.data;
+  },
+
+  restoreDocument: async (documentId: number): Promise<{ message: string; document: AdminDocument }> => {
+    const response = await adminApiClient.post(`/admin/documents/${documentId}/restore`, {});
+    return response.data;
+  },
+
+  deleteDocument: async (documentId: number, note?: string): Promise<{ message: string; document: AdminDocument }> => {
+    const response = await adminApiClient.delete(`/admin/documents/${documentId}`, { params: note ? { note } : undefined });
     return response.data;
   },
 
@@ -217,8 +233,13 @@ export const adminApi = {
     return response.data;
   },
 
-  getLogs: async (): Promise<{ processing_logs: ProcessingLog[]; chat_logs: ChatLog[] }> => {
+  getLogs: async (): Promise<{ processing_logs: ProcessingLog[]; chat_logs: ChatLog[]; audit_logs: AuditLog[] }> => {
     const response = await adminApiClient.get('/admin/logs');
+    return response.data;
+  },
+
+  getAuditLogs: async (): Promise<{ audit_logs: AuditLog[] }> => {
+    const response = await adminApiClient.get('/admin/audit-logs');
     return response.data;
   },
 
