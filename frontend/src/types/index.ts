@@ -60,7 +60,7 @@ export interface AdminDocument {
   logical_name: string;
   version: number;
   original_filename: string;
-  status: 'uploaded' | 'parsing' | 'embedding' | 'ready' | 'failed' | 'deleted';
+  status: 'uploaded' | 'parsing' | 'embedding' | 'review' | 'ready' | 'rejected' | 'archived' | 'failed' | 'deleted';
   parser_type: string | null;
   is_active: boolean;
   is_deleted: boolean;

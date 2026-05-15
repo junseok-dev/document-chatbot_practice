@@ -238,5 +238,16 @@ def match_button_faq(query: str) -> str | None:
     return None
 
 
+def match_faq_general(query: str, threshold: float = 7.5) -> str | None:
+    """일반 대화에서 direct_answer FAQ와 충분히 매칭될 때 답변 반환."""
+    matched = match_faq(query)
+    if not matched:
+        return None
+    score, faq = matched
+    if faq.get("direct_answer") and score >= threshold:
+        return faq.get("answer")
+    return None
+
+
 def get_suggested_questions() -> list[dict]:
     return _load_faq_json().get("suggested_questions", [])

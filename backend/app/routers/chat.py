@@ -11,7 +11,7 @@ from app.db.database import get_db
 from app.db.models import CancelRequest, ChatLog
 from app.models.chat import ChatRequest, ChatResponse, SuggestedQuestionsResponse
 from app.services.document_service import search_documents
-from app.services.faq_service import get_suggested_questions, is_guide_query, match_button_faq, search_faq
+from app.services.faq_service import get_suggested_questions, is_guide_query, match_button_faq, match_faq_general, search_faq
 from app.services.guardrail_service import check as guardrail_check
 from app.services.openai_service import get_ai_response, get_ai_response_stream
 from app.services.prompt_service import get_prompt_value
@@ -179,6 +179,9 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     elif btn := match_button_faq(request.message):
         answer = btn
         source = "faq"
+    elif gen := match_faq_general(request.message):
+        answer = gen
+        source = "faq"
     else:
         if is_guide_query(request.message):
             faq_answer = search_faq(request.message)
@@ -188,10 +191,10 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
             else:
                 answer = (
                     "플레이데이터 상담봇에서는 다음 카테고리의 질문을 도와드릴 수 있어요.\n\n"
-                    "- **법률**: 개인정보 처리방침, 이용약관, 법적 고지 등\n"
-                    "- **운영규정**: 수강 규정, 출결 기준, 수료 조건, 환불 정책 등\n"
-                    "- **과정 상세**: 커리큘럼, 교육 기간, 비용, 취업 지원 등\n"
-                    "- **플레이데이터 정보**: 회사 소개, 오시는 길, 채용, 제휴 등\n\n"
+                    "- **인터뷰/선발**: 면접 방식, 선발 기준, 추가선발 대기 안내\n"
+                    "- **운영규정**: 수강 규정, 출결 기준, 수료 조건, 훈련장려금, 환불 정책\n"
+                    "- **과정 상세**: 커리큘럼, 교육 기간, 비용, 취업 지원, 프리코스\n"
+                    "- **플레이데이터 정보**: 캠퍼스 위치·운영시간, 모집 일정, 기관 소개\n\n"
                     "궁금하신 내용을 구체적으로 질문해 주시면 더 정확하게 안내드릴게요!"
                 )
                 source = "faq"
@@ -303,15 +306,19 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
             source = "faq"
             async for chunk in _stream_static(btn):
                 yield chunk
+        elif gen := match_faq_general(request.message):
+            source = "faq"
+            async for chunk in _stream_static(gen):
+                yield chunk
         else:
             if is_guide_query(request.message):
                 faq_answer = search_faq(request.message)
                 static_text = faq_answer if faq_answer else (
                     "플레이데이터 상담봇에서는 다음 카테고리의 질문을 도와드릴 수 있어요.\n\n"
-                    "- **법률**: 개인정보 처리방침, 이용약관, 법적 고지 등\n"
-                    "- **운영규정**: 수강 규정, 출결 기준, 수료 조건, 환불 정책 등\n"
-                    "- **과정 상세**: 커리큘럼, 교육 기간, 비용, 취업 지원 등\n"
-                    "- **플레이데이터 정보**: 회사 소개, 오시는 길, 채용, 제휴 등\n\n"
+                    "- **인터뷰/선발**: 면접 방식, 선발 기준, 추가선발 대기 안내\n"
+                    "- **운영규정**: 수강 규정, 출결 기준, 수료 조건, 훈련장려금, 환불 정책\n"
+                    "- **과정 상세**: 커리큘럼, 교육 기간, 비용, 취업 지원, 프리코스\n"
+                    "- **플레이데이터 정보**: 캠퍼스 위치·운영시간, 모집 일정, 기관 소개\n\n"
                     "궁금하신 내용을 구체적으로 질문해 주시면 더 정확하게 안내드릴게요!"
                 )
                 source = "faq"
