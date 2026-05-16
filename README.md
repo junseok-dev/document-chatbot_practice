@@ -16,7 +16,9 @@
 8. [AWS 인프라 및 배포](#8-aws-인프라-및-배포)
 9. [보안 설계](#9-보안-설계)
 10. [프론트엔드 구조](#10-프론트엔드-구조)
-11. [디렉토리 구조](#11-디렉토리-구조)
+11. [관리자 대시보드 기능](#11-관리자-대시보드-기능)
+12. [디렉토리 구조](#12-디렉토리-구조)
+13. [변경 이력](#13-변경-이력)
 
 ---
 
@@ -29,7 +31,9 @@
 - 과정 소개, 지원 대상, 커리큘럼, 운영 정책, 환불 규정 등 안내
 - FAQ 우선 매칭 → 문서 검색(RAG) → LLM 생성 순의 다층 응답 구조
 - 실시간 스트리밍 응답 (Server-Sent Events, 타이핑 효과)
-- 관리자 대시보드: 문서 업로드/승인, FAQ 관리, 프롬프트 편집, 상담 기록 조회
+- 대화 이력 기반 맥락 파악 — 연속 질문을 자연스럽게 이어서 답변
+- 여러 질문 동시 처리 — 한 메시지에 여러 질문이 있을 때 통합 답변
+- 관리자 대시보드: 문서 업로드/승인, FAQ 관리, 프롬프트 편집, 상담 기록 조회, 데이터 관리, DB 브라우저
 - 개인정보 및 메시지 내용 Fernet 암호화 저장
 - 경비 시스템(Guardrail): 프롬프트 인젝션, 욕설, 개인정보, 경쟁사 언급 감지 및 차단
 
@@ -119,6 +123,9 @@
 │  │ faqs              │      S3 ↔ EC2                            │
 │  │ prompt_configs    │                                           │
 │  │ admin_audit_logs  │                                           │
+│  │ custom_tables     │  ← 데이터 관리: 테이블 메타데이터           │
+│  │ custom_columns    │  ← 데이터 관리: 컬럼 정의                   │
+│  │ cdata_{id}        │  ← 데이터 관리: 실제 SQL 데이터 테이블      │
 │  └───────────────────┘                                           │
 └─────────────────────────────────────────────────────────────────┘
                       │
@@ -289,6 +296,9 @@ POST /api/chat/stream
 | `admin_audit_logs` | 관리자 작업 감시 로그 | — |
 | `cancel_requests` | 취소/환불 요청 기록 | — |
 | `processing_logs` | 문서 처리 상태 로그 | — |
+| `custom_tables` | 데이터 관리 탭: 사용자 정의 테이블 메타데이터 | — |
+| `custom_columns` | 데이터 관리 탭: 컬럼 정의 (text/number/date) | — |
+| `cdata_{id}` | 데이터 관리 탭: 실제 데이터 저장 테이블 (동적 생성) | — |
 
 ### 암호화 방식
 
@@ -365,8 +375,30 @@ python scripts/migrate_sqlite_to_rds.py
 | `GET` | `/api/admin/sessions/{id}` | 세션 상세 |
 | `GET` | `/api/admin/logs` | 처리 로그 |
 | `GET` | `/api/admin/audit-logs` | 관리자 감시 로그 |
-| `GET` | `/api/admin/chat-logs` | 상담 로그 |
+| `GET` | `/api/admin/chat-logs` | 상담 로그 (start_date, end_date, session_id 필터) |
 | `GET` | `/api/admin/chat-logs/export` | 상담 로그 Excel 내보내기 |
+
+**데이터 관리** (사용자 정의 데이터 테이블 — 비개발자용 DBeaver)
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| `GET` | `/api/admin/data-tables` | 테이블 목록 |
+| `POST` | `/api/admin/data-tables` | 테이블 생성 → RDS에 실제 `cdata_{id}` SQL 테이블 CREATE |
+| `DELETE` | `/api/admin/data-tables/{id}` | 테이블 삭제 → `cdata_{id}` DROP TABLE |
+| `GET` | `/api/admin/data-tables/{id}` | 테이블 상세 (컬럼 + 데이터 행) |
+| `POST` | `/api/admin/data-tables/{id}/columns` | 컬럼 추가 → ALTER TABLE ADD COLUMN |
+| `DELETE` | `/api/admin/data-tables/{id}/columns/{cid}` | 컬럼 삭제 → ALTER TABLE DROP COLUMN |
+| `POST` | `/api/admin/data-tables/{id}/rows` | 행 추가 → INSERT INTO |
+| `PUT` | `/api/admin/data-tables/{id}/rows/{rid}` | 행 수정 → UPDATE |
+| `DELETE` | `/api/admin/data-tables/{id}/rows/{rid}` | 행 삭제 → DELETE |
+| `GET` | `/api/admin/data-tables/{id}/export` | Excel 내보내기 |
+
+**DB 브라우저** (RDS 전체 테이블 조회)
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| `GET` | `/api/admin/db/tables` | RDS 전체 테이블 목록 + 각 테이블 한국어 설명 |
+| `GET` | `/api/admin/db/tables/{name}` | 테이블 데이터 페이지네이션 조회 (암호화 필드 자동 복호화) |
 
 ---
 
@@ -475,8 +507,20 @@ X-Admin-Password: <ADMIN_PASSWORD>
 | 경로 | 컴포넌트 | 설명 |
 |------|----------|------|
 | `/` | `ChatPage.tsx` | 메인 채팅 인터페이스 |
-| `/admin` | `AdminPage.tsx` | 관리자 대시보드 |
+| `/admin` | `AdminPage.tsx` | 관리자 대시보드 (7개 탭) |
 | `/admin/sessions/:id` | `AdminSessionPage.tsx` | 세션 상세 |
+
+**AdminPage 탭 구성**
+
+| 탭 | 설명 |
+|----|------|
+| 문서 관리 | PDF/Markdown 업로드, 승인/반려, 재시도 |
+| FAQ 관리 | FAQ 조회/생성/수정/삭제 |
+| 프롬프트 | 시스템 프롬프트 런타임 편집 |
+| 세션 | 사용자 세션 목록 조회 |
+| 로그/내보내기 | 상담 로그 필터 조회 + Excel 내보내기 |
+| 데이터 관리 | 커스텀 SQL 테이블 생성·편집·Excel 내보내기 |
+| DB 브라우저 | RDS 전체 테이블 탐색 + 암호화 필드 복호화 표시 |
 
 ### 핵심 커스텀 훅 (useChat.ts)
 
@@ -513,7 +557,49 @@ await chatApi.streamMessage(
 
 ---
 
-## 11. RAG 품질 평가 결과 (RAGAS)
+## 11. 관리자 대시보드 기능
+
+### 데이터 관리 탭 (커스텀 SQL 테이블)
+
+비개발자도 브라우저에서 구조화 데이터를 관리할 수 있는 DBeaver 대체 기능:
+
+```
+1. 테이블 생성 (이름 + 설명)
+        │
+        ▼
+   RDS에 cdata_{id} 테이블 CREATE 실행
+
+2. 컬럼 추가 (이름 + 타입: text / number / date)
+        │
+        ▼
+   ALTER TABLE cdata_{id} ADD COLUMN
+
+3. 데이터 입력 / 수정 / 삭제
+        │
+        ▼
+   INSERT INTO / UPDATE / DELETE FROM cdata_{id}
+
+4. Excel 내보내기
+        │
+        ▼
+   SELECT → openpyxl → .xlsx 다운로드
+```
+
+- 컬럼 타입별 SQL 매핑: `text` → TEXT, `number` → NUMERIC, `date` → DATE
+- 생성된 테이블은 DB 브라우저 탭에서도 즉시 확인 가능
+
+### DB 브라우저 탭
+
+RDS Aurora의 전체 테이블을 읽기 전용으로 탐색:
+
+- 모든 시스템 테이블에 한국어 설명 표시
+- `cdata_*` 테이블은 데이터 관리에서 입력한 테이블명/설명으로 표시
+- 암호화된 필드(`enc::` 접두사) 자동 복호화 후 원문 표시
+- 페이지네이션 지원 (기본 50행, 최대 200행/페이지)
+
+---
+
+## 12. RAG 품질 평가 결과 (RAGAS)
 
 평가 일시: 2026-05-13 | 평가 도구: [RAGAS](https://github.com/explodinggradients/ragas)
 총 질문 수: 52개 (RAGAS 평가 47개 + Hallucination 테스트 5개)
@@ -545,7 +631,7 @@ await chatApi.streamMessage(
 
 ---
 
-## 12. 디렉토리 구조
+## 13. 디렉토리 구조
 
 ```
 document-chatbot_practice/
@@ -558,7 +644,7 @@ document-chatbot_practice/
 │   │   ├── main.py                 ← FastAPI 애플리케이션 진입점
 │   │   ├── config.py               ← 설정 (pydantic-settings, .env 로드)
 │   │   ├── db/
-│   │   │   ├── models.py           ← SQLAlchemy ORM 모델 (10개 테이블)
+│   │   │   ├── models.py           ← SQLAlchemy ORM 모델 (custom_tables, custom_columns 포함)
 │   │   │   ├── database.py         ← Aurora RDS 연결 및 세션
 │   │   │   ├── crud.py             ← CRUD 유틸리티
 │   │   │   └── migrations.py       ← 스키마 마이그레이션
@@ -649,3 +735,37 @@ document-chatbot_practice/
         ▼
 5. 새 문서 내용이 검색에 즉시 반영
 ```
+
+---
+
+## 변경 이력
+
+### 2026-05-16
+
+**데이터 관리 ↔ DB 브라우저 연동**
+- 데이터 관리 탭에서 테이블 생성 시 RDS에 실제 SQL 테이블(`cdata_{id}`) 자동 생성
+- 컬럼 추가/삭제가 `ALTER TABLE ADD/DROP COLUMN`으로 실제 스키마 변경
+- 행 CRUD가 `INSERT / UPDATE / DELETE INTO cdata_{id}` 실제 SQL DML로 동작
+- DB 브라우저에서 `cdata_*` 테이블을 데이터 관리 테이블명·설명으로 표시
+- DB 브라우저 전체 테이블에 한국어 설명 추가
+- DB 브라우저 암호화 필드(`enc::`) 자동 복호화 후 원문 표시
+- 기존 CustomRow EAV JSON 방식 제거
+
+### 2026-05-15
+
+**챗봇 응답 품질 개선**
+- 대화 이력(`history`) 기반 맥락 파악 후 불필요한 되묻기 방지
+- 한 메시지에 여러 질문이 있을 때 통합해서 한 번에 답변
+- 이전 대화에서 약속한 내용 이행 (거절/주제 전환 시 예외 처리)
+- 단독 "채널톡" 키워드로 핸드오프 오인식 방지
+- LLM이 "관리자 콘솔" 등 내부 언어 노출하지 않도록 규칙 추가
+- 채널톡 URL을 LLM 컨텍스트에 주입하여 링크 직접 제공
+
+**관리자 페이지 개선**
+- 대화 로그 조회 버튼 작동 수정 및 세션 ID 선택 사항으로 변경
+- 로그인 비밀번호 표시/숨기기 토글 추가
+- 데이터 관리 탭 신규 추가 (커스텀 테이블 CRUD + Excel 내보내기)
+- DB 브라우저 탭 신규 추가 (RDS Aurora 전체 테이블 탐색)
+
+**용어 정정**
+- 제공 물품·지참 사항 관련 FAQ, 문서, 스크립트에서 맥락별 용어 통일
