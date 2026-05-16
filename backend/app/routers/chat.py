@@ -79,13 +79,21 @@ EMPLOYMENT_RATE_ANSWER = (
 def is_handoff_request(message: str) -> bool:
     normalized = _normalize_intent_text(message)
     direct_handoff_signals = [
-        "상담연결",
-        "사람상담",
-        "매니저연결",
+        # 명시적 연결 요청
+        "상담연결", "상담원연결", "사람상담", "사람이랑",
+        "매니저연결", "매니저에게", "매니저한테",
+        "담당자연결", "담당자에게", "담당자한테",
+        "직원연결", "직원에게", "직원한테",
         "문의연결",
-        "상담원연결",
-        "직원연결",
-        "담당자연결",
+        # 채널톡 직접 언급
+        "채널톡",
+        # 직접 문의/연락 의사
+        "직접문의", "직접연락", "직접물어",
+        "문의하고싶", "문의드리고싶", "문의하고싶어", "문의하려고",
+        "연락하고싶", "연락드리고싶",
+        "연락처", "전화번호", "이메일주소",
+        # 사람과 대화 요청
+        "사람과", "사람한테", "실제사람",
     ]
     return any(signal in normalized for signal in direct_handoff_signals)
 
@@ -267,60 +275,27 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                     await asyncio.sleep(1.0)
                 yield _sse({"token": bubble})
 
+        has_history = bool(request.history)
+
         blocked = guardrail_check(request.message)
         if blocked:
             source = "guardrail"
             async for chunk in _stream_static(blocked):
                 yield chunk
-        elif is_cancel_request(request.message):
-            source = "handoff"
-            processing_status = "handoff"
-            db.add(CancelRequest(session_id=request.session_id, message=request.message, status="requested"))
-            db.commit()
-            async for chunk in _stream_static(get_prompt_value("cancel_prompt")):
-                yield chunk
-        elif is_handoff_request(request.message):
-            source = "handoff"
-            processing_status = "handoff"
-            async for chunk in _stream_static(get_prompt_value("handoff_prompt")):
-                yield chunk
-        elif is_greeting(request.message):
-            source = "faq"
-            async for chunk in _stream_static(GREETING_ANSWER):
-                yield chunk
-        elif btn := match_button_faq(request.message):
-            source = "faq"
-            async for chunk in _stream_static(btn, max_bubbles=10):
-                yield chunk
-        elif gen := match_faq_general(request.message):
-            source = "faq"
-            async for chunk in _stream_static(gen, max_bubbles=10):
-                yield chunk
-        elif is_training_cost_query(request.message):
-            source = "faq"
-            async for chunk in _stream_static(TRAINING_COST_ANSWER):
-                yield chunk
-        elif is_intake_count_query(request.message):
-            source = "faq"
-            async for chunk in _stream_static(INTAKE_COUNT_ANSWER):
-                yield chunk
-        elif is_employment_rate_query(request.message):
-            source = "faq"
-            async for chunk in _stream_static(EMPLOYMENT_RATE_ANSWER):
-                yield chunk
-        else:
-            if is_guide_query(request.message):
-                faq_answer = search_faq(request.message)
-                static_text = faq_answer if faq_answer else (
-                    "플레이데이터 상담봇에서는 다음 카테고리의 질문을 도와드릴 수 있어요.\n\n"
-                    "- **인터뷰/선발**: 면접 방식, 선발 기준, 추가선발 대기 안내\n"
-                    "- **운영규정**: 수강 규정, 출결 기준, 수료 조건, 훈련장려금, 환불 정책\n"
-                    "- **과정 상세**: 커리큘럼, 교육 기간, 비용, 취업 지원, 프리코스\n"
-                    "- **플레이데이터 정보**: 캠퍼스 위치·운영시간, 모집 일정, 기관 소개\n\n"
-                    "궁금하신 내용을 구체적으로 질문해 주시면 더 정확하게 안내드릴게요!"
-                )
-                source = "faq"
-                async for chunk in _stream_static(static_text, max_bubbles=10):
+
+        elif has_history:
+            # 대화 중: 취소/상담원 연결만 체크하고 나머지는 LLM이 맥락 보고 답변
+            if is_cancel_request(request.message):
+                source = "handoff"
+                processing_status = "handoff"
+                db.add(CancelRequest(session_id=request.session_id, message=request.message, status="requested"))
+                db.commit()
+                async for chunk in _stream_static(get_prompt_value("cancel_prompt")):
+                    yield chunk
+            elif is_handoff_request(request.message):
+                source = "handoff"
+                processing_status = "handoff"
+                async for chunk in _stream_static(get_prompt_value("handoff_prompt")):
                     yield chunk
             else:
                 result = search_documents(request.message)
@@ -338,6 +313,75 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                     error_message = str(exc)
                     async for chunk in _stream_static(fallback):
                         yield chunk
+
+        else:
+            # 첫 메시지: 키워드 라우팅
+            if is_cancel_request(request.message):
+                source = "handoff"
+                processing_status = "handoff"
+                db.add(CancelRequest(session_id=request.session_id, message=request.message, status="requested"))
+                db.commit()
+                async for chunk in _stream_static(get_prompt_value("cancel_prompt")):
+                    yield chunk
+            elif is_handoff_request(request.message):
+                source = "handoff"
+                processing_status = "handoff"
+                async for chunk in _stream_static(get_prompt_value("handoff_prompt")):
+                    yield chunk
+            elif is_greeting(request.message):
+                source = "faq"
+                async for chunk in _stream_static(GREETING_ANSWER):
+                    yield chunk
+            elif btn := match_button_faq(request.message):
+                source = "faq"
+                async for chunk in _stream_static(btn, max_bubbles=10):
+                    yield chunk
+            elif gen := match_faq_general(request.message):
+                source = "faq"
+                async for chunk in _stream_static(gen, max_bubbles=10):
+                    yield chunk
+            elif is_training_cost_query(request.message):
+                source = "faq"
+                async for chunk in _stream_static(TRAINING_COST_ANSWER):
+                    yield chunk
+            elif is_intake_count_query(request.message):
+                source = "faq"
+                async for chunk in _stream_static(INTAKE_COUNT_ANSWER):
+                    yield chunk
+            elif is_employment_rate_query(request.message):
+                source = "faq"
+                async for chunk in _stream_static(EMPLOYMENT_RATE_ANSWER):
+                    yield chunk
+            else:
+                if is_guide_query(request.message):
+                    faq_answer = search_faq(request.message)
+                    static_text = faq_answer if faq_answer else (
+                        "플레이데이터 상담봇에서는 다음 카테고리의 질문을 도와드릴 수 있어요.\n\n"
+                        "- **인터뷰/선발**: 면접 방식, 선발 기준, 추가선발 대기 안내\n"
+                        "- **운영규정**: 수강 규정, 출결 기준, 수료 조건, 훈련장려금, 환불 정책\n"
+                        "- **과정 상세**: 커리큘럼, 교육 기간, 비용, 취업 지원, 프리코스\n"
+                        "- **플레이데이터 정보**: 캠퍼스 위치·운영시간, 모집 일정, 기관 소개\n\n"
+                        "궁금하신 내용을 구체적으로 질문해 주시면 더 정확하게 안내드릴게요!"
+                    )
+                    source = "faq"
+                    async for chunk in _stream_static(static_text, max_bubbles=10):
+                        yield chunk
+                else:
+                    result = search_documents(request.message)
+                    retrieval_chunks = result.chunks
+                    history = [{"role": h.role, "content": h.content} for h in request.history]
+                    try:
+                        async for token in get_ai_response_stream(request.message, result.context, history):
+                            full_answer += token
+                            yield _sse({"token": token})
+                        source = "document" if result.context else "ai"
+                    except Exception as exc:
+                        fallback = get_prompt_value("fallback_prompt")
+                        source = "fallback"
+                        processing_status = "failed"
+                        error_message = str(exc)
+                        async for chunk in _stream_static(fallback):
+                            yield chunk
 
         handoff_url: str | None = None
         if source == "handoff":
