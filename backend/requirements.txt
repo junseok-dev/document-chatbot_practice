@@ -11,6 +11,7 @@ aiofiles
 opendataloader-pdf
 faiss-cpu
 chromadb
+langsmith
 langchain
 langchain-openai
 langchain-chroma

@@ -1,6 +1,7 @@
 import asyncio
 from typing import AsyncGenerator
 
+from langsmith import traceable
 from openai import AsyncOpenAI
 
 from app.config import get_settings
@@ -74,6 +75,7 @@ def _build_user_message(question: str, context: str) -> str:
     )
 
 
+@traceable(name="LLM 응답 생성", run_type="llm")
 async def get_ai_response(question: str, context: str, history: list[dict] | None = None) -> tuple[str, float]:
     if client is None:
         return format_chat_response(STANDARD_REFUSAL), 0.0
