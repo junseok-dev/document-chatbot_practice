@@ -161,6 +161,12 @@ export default function AdminPage() {
     }
   }, [authenticated]);
 
+  useEffect(() => {
+    if (activeTab === 'data' && dataTables.length > 0 && !selectedTable) {
+      void loadTableDetail(dataTables[0].id);
+    }
+  }, [activeTab, dataTables]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!passwordInput.trim()) return;
