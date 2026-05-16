@@ -57,6 +57,7 @@ function formatDate(value: string | null | undefined): string {
 export default function AdminPage() {
   const [authenticated, setAuthenticated] = useState(() => !!getAdminPassword());
   const [passwordInput, setPasswordInput] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
@@ -512,7 +513,12 @@ export default function AdminPage() {
             <h1 className="text-2xl font-semibold text-slate-900">관리자 로그인</h1>
             <p className="mt-2 text-sm text-slate-500">운영 데이터는 관리자 화면에서만 복호화해 확인합니다.</p>
             <div className="mt-6 space-y-3">
-              <input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} placeholder="관리자 비밀번호" className={INPUT_CLASS} autoFocus />
+              <div className="relative">
+                <input type={showPassword ? 'text' : 'password'} value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} placeholder="관리자 비밀번호" className={INPUT_CLASS} autoFocus />
+                <button type="button" onClick={() => setShowPassword((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600">
+                  {showPassword ? '숨기기' : '표시'}
+                </button>
+              </div>
               {loginError && <p className="text-sm text-rose-600">{loginError}</p>}
               <button type="submit" disabled={loginLoading || !passwordInput.trim()} className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white disabled:opacity-50">
                 {loginLoading ? '확인 중...' : '로그인'}
