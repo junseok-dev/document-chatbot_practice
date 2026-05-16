@@ -102,10 +102,7 @@ async def _yield_chat_text(text: str) -> AsyncGenerator[str, None]:
         if index > 0:
             yield "\n\n"
             await asyncio.sleep(BUBBLE_PAUSE_SECONDS)
-
-        for char in bubble:
-            yield char
-            await asyncio.sleep(TYPE_DELAY_SECONDS)
+        yield bubble
 
 
 async def get_ai_response_stream(question: str, context: str, history: list[dict] | None = None) -> AsyncGenerator[str, None]:

@@ -265,9 +265,7 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                 if bubble_index > 0:
                     yield _sse({"token": "\n\n"})
                     await asyncio.sleep(1.0)
-                for char in bubble:
-                    yield _sse({"token": char})
-                    await asyncio.sleep(0.015)
+                yield _sse({"token": bubble})
 
         blocked = guardrail_check(request.message)
         if blocked:
