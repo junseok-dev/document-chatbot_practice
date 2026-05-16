@@ -12,6 +12,8 @@ import {
   CustomRowData,
   CustomTableDetail,
   CustomTableSummary,
+  DbTableData,
+  DbTableMeta,
   ProcessingLog,
   PromptConfig,
   PromptPayload,
@@ -301,6 +303,17 @@ export const adminApi = {
 
   deleteRow: async (tableId: number, rowId: number): Promise<void> => {
     await adminApiClient.delete(`/admin/data-tables/${tableId}/rows/${rowId}`);
+  },
+
+  // DB 브라우저
+  getDbTables: async (): Promise<{ tables: DbTableMeta[] }> => {
+    const response = await adminApiClient.get('/admin/db/tables');
+    return response.data;
+  },
+
+  browseDbTable: async (tableName: string, page: number, limit = 50): Promise<DbTableData> => {
+    const response = await adminApiClient.get(`/admin/db/tables/${tableName}`, { params: { page, limit } });
+    return response.data;
   },
 
   exportDataTable: async (tableId: number, tableName: string): Promise<void> => {

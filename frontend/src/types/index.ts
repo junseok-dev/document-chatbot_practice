@@ -170,3 +170,17 @@ export interface CustomTableDetail {
   columns: CustomColumnDef[];
   rows: CustomRowData[];
 }
+
+export interface DbTableMeta {
+  name: string;
+  row_count: number;
+  columns: string[];
+}
+
+export interface DbTableData {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  total: number;
+  page: number;
+  limit: number;
+}

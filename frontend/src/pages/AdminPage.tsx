@@ -10,12 +10,14 @@ import {
   ChatLog,
   CustomTableDetail,
   CustomTableSummary,
+  DbTableData,
+  DbTableMeta,
   ProcessingLog,
   PromptConfig,
   PromptPayload,
 } from '../types';
 
-type TabKey = 'documents' | 'faqs' | 'prompts' | 'chats' | 'data';
+type TabKey = 'documents' | 'faqs' | 'prompts' | 'chats' | 'data' | 'db';
 
 const EMPTY_FAQ: AdminFaq = {
   id: '',
@@ -102,6 +104,13 @@ export default function AdminPage() {
   const [chatLoading, setChatLoading] = useState(false);
   const [chatExporting, setChatExporting] = useState(false);
 
+  // DB 브라우저
+  const [dbTables, setDbTables] = useState<DbTableMeta[]>([]);
+  const [selectedDbTable, setSelectedDbTable] = useState<string | null>(null);
+  const [dbTableData, setDbTableData] = useState<DbTableData | null>(null);
+  const [dbPage, setDbPage] = useState(1);
+  const [dbLoading, setDbLoading] = useState(false);
+
   // 데이터 관리
   const [dataTables, setDataTables] = useState<CustomTableSummary[]>([]);
   const [selectedTable, setSelectedTable] = useState<CustomTableDetail | null>(null);
@@ -158,6 +167,7 @@ export default function AdminPage() {
     if (authenticated) {
       void loadDashboard();
       void loadDataTables();
+      void loadDbTables();
     }
   }, [authenticated]);
 
@@ -166,6 +176,12 @@ export default function AdminPage() {
       void loadTableDetail(dataTables[0].id);
     }
   }, [activeTab, dataTables]);
+
+  useEffect(() => {
+    if (activeTab === 'db' && dbTables.length > 0 && !selectedDbTable) {
+      void handleSelectDbTable(dbTables[0].name);
+    }
+  }, [activeTab, dbTables]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -504,6 +520,35 @@ export default function AdminPage() {
     }
   };
 
+  // ── DB 브라우저 핸들러 ──────────────────────────────────────
+  const loadDbTables = async () => {
+    try {
+      const result = await adminApi.getDbTables();
+      setDbTables(result.tables);
+    } catch {
+      setNotice('DB 테이블 목록을 불러오지 못했습니다.');
+    }
+  };
+
+  const loadDbTableData = async (tableName: string, page = 1) => {
+    setDbLoading(true);
+    try {
+      const result = await adminApi.browseDbTable(tableName, page);
+      setDbTableData(result);
+      setDbPage(page);
+    } catch {
+      setNotice('테이블 데이터를 불러오지 못했습니다.');
+    } finally {
+      setDbLoading(false);
+    }
+  };
+
+  const handleSelectDbTable = async (tableName: string) => {
+    setSelectedDbTable(tableName);
+    setDbPage(1);
+    await loadDbTableData(tableName, 1);
+  };
+
   const documentRows = useMemo(
     () => [...documents].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
     [documents],
@@ -572,6 +617,7 @@ export default function AdminPage() {
             ['prompts', '프롬프트'],
             ['chats', '로그/내보내기'],
             ['data', '데이터 관리'],
+            ['db', 'DB 브라우저'],
           ] as [TabKey, string][]).map(([key, label]) => (
             <button key={key} onClick={() => setActiveTab(key)} className={`rounded-full px-4 py-2 text-sm font-medium ${activeTab === key ? 'bg-slate-900 text-white' : 'bg-white text-slate-600'}`}>
               {label}
@@ -1058,6 +1104,87 @@ export default function AdminPage() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'db' && (
+          <div className="mt-6 flex gap-6">
+            {/* 왼쪽: 테이블 목록 */}
+            <div className="w-56 shrink-0">
+              <div className="rounded-3xl bg-white p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-semibold text-slate-900">테이블</h2>
+                  <button onClick={() => void loadDbTables()} className="text-xs text-slate-400 hover:text-slate-700">새로고침</button>
+                </div>
+                <div className="mt-3 space-y-0.5">
+                  {dbTables.map((t) => (
+                    <button
+                      key={t.name}
+                      onClick={() => void handleSelectDbTable(t.name)}
+                      className={`w-full rounded-xl px-3 py-2 text-left ${selectedDbTable === t.name ? 'bg-slate-900 text-white' : 'hover:bg-slate-100 text-slate-700'}`}
+                    >
+                      <div className="truncate text-sm font-medium">{t.name}</div>
+                      <div className={`text-xs ${selectedDbTable === t.name ? 'text-slate-300' : 'text-slate-400'}`}>{t.row_count.toLocaleString()}행</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* 오른쪽: 데이터 */}
+            <div className="min-w-0 flex-1">
+              {!selectedDbTable ? (
+                <div className="flex h-64 items-center justify-center rounded-3xl bg-white shadow-sm">
+                  <p className="text-slate-400">왼쪽에서 테이블을 선택하세요.</p>
+                </div>
+              ) : dbLoading ? (
+                <div className="flex h-64 items-center justify-center rounded-3xl bg-white shadow-sm">
+                  <p className="text-slate-400">불러오는 중...</p>
+                </div>
+              ) : dbTableData ? (
+                <div className="rounded-3xl bg-white p-5 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="font-semibold text-slate-900">{selectedDbTable}</h2>
+                      <p className="text-xs text-slate-400">전체 {dbTableData.total.toLocaleString()}행 · {dbTableData.page}페이지</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => void loadDbTableData(selectedDbTable, dbPage - 1)} disabled={dbPage <= 1} className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm disabled:opacity-30">← 이전</button>
+                      <button onClick={() => void loadDbTableData(selectedDbTable, dbPage + 1)} disabled={dbPage * dbTableData.limit >= dbTableData.total} className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm disabled:opacity-30">다음 →</button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-100">
+                          {dbTableData.columns.map((col) => (
+                            <th key={col} className="pb-2 pr-4 text-left text-xs font-medium text-slate-500 whitespace-nowrap">{col}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {dbTableData.rows.map((row, i) => (
+                          <tr key={i} className="hover:bg-slate-50">
+                            {dbTableData.columns.map((col) => {
+                              const val = row[col];
+                              const str = val === null || val === undefined ? '' : String(val);
+                              const truncated = str.length > 60 ? str.slice(0, 60) + '…' : str;
+                              return (
+                                <td key={col} className="py-2 pr-4 text-xs text-slate-700 whitespace-nowrap" title={str}>{truncated}</td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                        {dbTableData.rows.length === 0 && (
+                          <tr><td colSpan={dbTableData.columns.length} className="py-6 text-center text-slate-400">데이터가 없습니다.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         )}

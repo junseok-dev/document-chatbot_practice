@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query
 from fastapi.responses import Response
 from openpyxl import Workbook
 from pydantic import BaseModel
+from sqlalchemy import inspect as sa_inspect, text
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -621,6 +622,54 @@ def export_data_table(table_id: int, db: Session = Depends(get_db), _: None = De
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ── DB 브라우저 ──────────────────────────────────────────────
+
+
+@router.get("/db/tables")
+def list_db_tables(db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    inspector = sa_inspect(db.bind)
+    tables = sorted(inspector.get_table_names())
+    result = []
+    for table_name in tables:
+        try:
+            count = db.execute(text(f'SELECT COUNT(*) FROM "{table_name}"')).scalar() or 0  # noqa: S608
+        except Exception:
+            count = -1
+        columns = [col["name"] for col in inspector.get_columns(table_name)]
+        result.append({"name": table_name, "row_count": count, "columns": columns})
+    return {"tables": result}
+
+
+@router.get("/db/tables/{table_name}")
+def browse_db_table(
+    table_name: str,
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_admin),
+):
+    inspector = sa_inspect(db.bind)
+    valid_tables = inspector.get_table_names()
+    if table_name not in valid_tables:
+        raise HTTPException(status_code=404, detail="테이블을 찾을 수 없습니다.")
+
+    columns = [col["name"] for col in inspector.get_columns(table_name)]
+    offset = (page - 1) * limit
+    total = db.execute(text(f'SELECT COUNT(*) FROM "{table_name}"')).scalar() or 0  # noqa: S608
+    rows_result = db.execute(
+        text(f'SELECT * FROM "{table_name}" ORDER BY id DESC LIMIT :limit OFFSET :offset'),  # noqa: S608
+        {"limit": limit, "offset": offset},
+    ).fetchall()
+
+    def _serialize(v):
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return v
+
+    rows = [dict(zip(columns, [_serialize(v) for v in row])) for row in rows_result]
+    return {"columns": columns, "rows": rows, "total": total, "page": page, "limit": limit}
 
 
 @router.put("/password")
