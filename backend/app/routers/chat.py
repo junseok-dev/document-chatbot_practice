@@ -301,8 +301,9 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                 result = search_documents(request.message)
                 retrieval_chunks = result.chunks
                 history = [{"role": h.role, "content": h.content} for h in request.history]
+                channel_talk_url = get_settings().channel_talk_url if "채널톡" in request.message else None
                 try:
-                    async for token in get_ai_response_stream(request.message, result.context, history):
+                    async for token in get_ai_response_stream(request.message, result.context, history, channel_talk_url):
                         full_answer += token
                         yield _sse({"token": token})
                     source = "document" if result.context else "ai"

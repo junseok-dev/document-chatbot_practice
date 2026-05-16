@@ -38,7 +38,9 @@ CHAT_STYLE_GUIDE = """
 [대화 흐름]
 - 반드시 한국어로 답변합니다.
 - 사용자가 방금 한 말과 이전 대화 맥락을 함께 보고 의도를 파악합니다.
+- 한 메시지에 질문이 여러 개면, 모두 파악해서 순서대로 통합해 한 번에 답변합니다. 마지막 질문만 골라 답하지 않습니다.
 - 이전 대화에서 제공하겠다고 약속한 내용이 있으면, 사용자가 그 일부만 요청해도 약속한 전체를 함께 제공합니다. 단, 사용자가 "괜찮아", "됐어", "필요없어" 같은 거절 표현을 했거나, 전혀 다른 주제로 넘어간 경우에는 약속한 내용을 꺼내지 않습니다.
+- 채널톡 링크나 URL을 요청받으면 [시스템 정보]에 제공된 URL을 그대로 안내합니다. URL이 없으면 "채널톡으로 연결해 드릴게요"라고만 안내합니다. "관리자 콘솔", "관리자 페이지", "URL 생성" 같은 내부 운영 용어는 절대 사용자에게 노출하지 않습니다.
 - 사용자가 말하지 않은 정보는 꺼내지 않습니다.
 - 문서를 그대로 읽어주지 말고, 쉬운 말로 다시 정리합니다.
 - 친절한 상담사가 채팅하는 말투로 답합니다.
@@ -72,9 +74,11 @@ def _build_messages(system_prompt: str, user_message: str, history: list[dict]) 
     return msgs
 
 
-def _build_user_message(question: str, context: str) -> str:
+def _build_user_message(question: str, context: str, channel_talk_url: str | None = None) -> str:
+    system_info = f"\n\n[시스템 정보]\n채널톡 상담 URL: {channel_talk_url}" if channel_talk_url else ""
+
     if not context:
-        return f"[사용자 질문]\n{question}"
+        return f"[사용자 질문]\n{question}{system_info}"
 
     return (
         "[상담 참고 자료]\n"
@@ -84,17 +88,17 @@ def _build_user_message(question: str, context: str) -> str:
         "참고 자료 전체를 나열하거나 요약하지 마세요.\n"
         "사용자가 물어본 범위를 벗어나는 정보는 다음 질문에서 안내하세요.\n\n"
         "[사용자 질문]\n"
-        f"{question}"
+        f"{question}{system_info}"
     )
 
 
 @traceable(name="LLM 응답 생성", run_type="llm")
-async def get_ai_response(question: str, context: str, history: list[dict] | None = None) -> tuple[str, float]:
+async def get_ai_response(question: str, context: str, history: list[dict] | None = None, channel_talk_url: str | None = None) -> tuple[str, float]:
     if client is None:
         return format_chat_response(STANDARD_REFUSAL), 0.0
 
     system_prompt = f"{get_prompt_value('counseling_prompt')}\n\n{CHAT_STYLE_GUIDE}"
-    messages = _build_messages(system_prompt, _build_user_message(question, context), history or [])
+    messages = _build_messages(system_prompt, _build_user_message(question, context, channel_talk_url), history or [])
 
     response = await client.chat.completions.create(
         model=settings.model_name,
@@ -118,12 +122,12 @@ async def _yield_chat_text(text: str) -> AsyncGenerator[str, None]:
         yield bubble
 
 
-async def get_ai_response_stream(question: str, context: str, history: list[dict] | None = None) -> AsyncGenerator[str, None]:
+async def get_ai_response_stream(question: str, context: str, history: list[dict] | None = None, channel_talk_url: str | None = None) -> AsyncGenerator[str, None]:
     if client is None:
         async for token in _yield_chat_text(format_chat_response(STANDARD_REFUSAL)):
             yield token
         return
 
-    answer, _ = await get_ai_response(question, context, history)
+    answer, _ = await get_ai_response(question, context, history, channel_talk_url)
     async for token in _yield_chat_text(answer):
         yield token
