@@ -173,6 +173,8 @@ export interface CustomTableDetail {
 
 export interface DbTableMeta {
   name: string;
+  display_name: string;
+  description: string;
   row_count: number;
   columns: string[];
 }

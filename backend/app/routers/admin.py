@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db.crud import get_all_sessions, get_session_messages
 from app.db.database import get_db
-from app.db.models import AdminAuditLog, ChatLog, ChatSession, CustomColumn, CustomRow, CustomTable, DocumentRecord, FaqRecord, ProcessingLog, PromptConfig
+from app.db.models import AdminAuditLog, ChatLog, ChatSession, CustomColumn, CustomTable, DocumentRecord, FaqRecord, ProcessingLog, PromptConfig
 from app.models.session import MessageDetail, SessionDetail, SessionSummary
 from app.services.admin_service import (
     approve_document,
@@ -36,6 +36,22 @@ router = APIRouter()
 
 ENV_PATH = Path(__file__).resolve().parent.parent.parent.parent / "backend" / ".env"
 PROTECTED_PROMPTS = set(PROMPT_DEFAULTS.keys())
+
+TABLE_DESCRIPTIONS: dict[str, str] = {
+    "chat_sessions": "사용자 채팅 세션 목록 — 세션 ID, 생성 시간, 메시지 수 등",
+    "chat_messages": "채팅 메시지 내역 — 역할(user/assistant), 소스, 생성 시간 등",
+    "chat_logs": "RAG 처리 로그 — 질문, 검색 청크, 답변, LLM 비용 등",
+    "documents": "문서 관리 — 업로드·파싱·임베딩·승인 상태 추적",
+    "chunks": "문서 청크 — RAG 검색에 사용되는 텍스트 조각",
+    "cancel_requests": "취소 요청 내역",
+    "processing_logs": "문서 처리 로그 — 파싱, 임베딩 등 단계별 처리 결과",
+    "prompt_configs": "LLM 프롬프트 설정 — 시스템 프롬프트, 스타일 가이드 등",
+    "faqs": "FAQ 데이터 — 질문, 답변, 키워드, 카테고리",
+    "admin_audit_logs": "관리자 감사 로그 — 누가, 무엇을, 언제 수행했는지",
+    "custom_tables": "사용자 정의 테이블 메타데이터 (데이터 관리 탭에서 생성한 테이블 목록)",
+    "custom_columns": "사용자 정의 테이블 컬럼 정의",
+    "custom_rows": "구형 EAV 방식 데이터 행 (현재 cdata_* 테이블 사용)",
+}
 
 
 def verify_admin(x_admin_password: str = Header(...)):
@@ -485,9 +501,18 @@ class UpsertRowRequest(BaseModel):
 @router.get("/data-tables")
 def list_data_tables(db: Session = Depends(get_db), _: None = Depends(verify_admin)):
     tables = db.query(CustomTable).order_by(CustomTable.created_at.desc()).all()
+    inspector = sa_inspect(db.bind)
+    existing_tables = set(inspector.get_table_names())
     result = []
     for t in tables:
-        row_count = db.query(CustomRow).filter(CustomRow.table_id == t.id).count()
+        real_table = f"cdata_{t.id}"
+        if real_table in existing_tables:
+            try:
+                row_count = db.execute(text(f'SELECT COUNT(*) FROM "{real_table}"')).scalar() or 0  # noqa: S608
+            except Exception:
+                row_count = 0
+        else:
+            row_count = 0
         result.append({"id": t.id, "name": t.name, "description": t.description, "row_count": row_count, "created_at": t.created_at})
     return {"tables": result}
 
@@ -500,6 +525,9 @@ def create_data_table(body: CreateTableRequest, db: Session = Depends(get_db), _
     db.add(table)
     db.commit()
     db.refresh(table)
+    real_table = f"cdata_{table.id}"
+    db.execute(text(f'CREATE TABLE IF NOT EXISTS "{real_table}" (id SERIAL PRIMARY KEY, created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW())'))  # noqa: S608
+    db.commit()
     create_audit_log(db, "data_table_created", "custom_table", str(table.id), body.name)
     return {"id": table.id, "name": table.name, "description": table.description}
 
@@ -509,7 +537,8 @@ def delete_data_table(table_id: int, db: Session = Depends(get_db), _: None = De
     table = db.query(CustomTable).filter(CustomTable.id == table_id).first()
     if not table:
         raise HTTPException(status_code=404, detail="테이블을 찾을 수 없습니다.")
-    db.query(CustomRow).filter(CustomRow.table_id == table_id).delete()
+    real_table = f"cdata_{table_id}"
+    db.execute(text(f'DROP TABLE IF EXISTS "{real_table}"'))  # noqa: S608
     db.query(CustomColumn).filter(CustomColumn.table_id == table_id).delete()
     db.delete(table)
     db.commit()
@@ -523,14 +552,26 @@ def get_data_table(table_id: int, db: Session = Depends(get_db), _: None = Depen
     if not table:
         raise HTTPException(status_code=404, detail="테이블을 찾을 수 없습니다.")
     columns = db.query(CustomColumn).filter(CustomColumn.table_id == table_id).order_by(CustomColumn.sort_order, CustomColumn.id).all()
-    rows = db.query(CustomRow).filter(CustomRow.table_id == table_id).order_by(CustomRow.id).all()
+    col_names = [c.column_name for c in columns]
+    real_table = f"cdata_{table_id}"
+    rows: list[dict] = []
+    inspector = sa_inspect(db.bind)
+    if real_table in inspector.get_table_names():
+        select_cols = ", ".join([f'"{cn}"' for cn in col_names]) if col_names else "1 as _empty"
+        raw_rows = db.execute(text(f'SELECT id, {select_cols}, created_at FROM "{real_table}" ORDER BY id DESC')).fetchall()  # noqa: S608
+        for r in raw_rows:
+            row_data = dict(zip(col_names, list(r)[1:-1]))
+            rows.append({"id": r[0], "data": row_data, "created_at": r[-1]})
     return {
         "id": table.id,
         "name": table.name,
         "description": table.description,
         "columns": [{"id": c.id, "column_name": c.column_name, "column_type": c.column_type, "sort_order": c.sort_order} for c in columns],
-        "rows": [{"id": r.id, "data": json.loads(r.data or "{}"), "created_at": r.created_at} for r in rows],
+        "rows": rows,
     }
+
+
+_COL_TYPE_MAP = {"text": "TEXT", "number": "NUMERIC", "date": "DATE"}
 
 
 @router.post("/data-tables/{table_id}/columns", status_code=201)
@@ -542,10 +583,15 @@ def add_column(table_id: int, body: CreateColumnRequest, db: Session = Depends(g
     if body.column_type not in ("text", "number", "date"):
         raise HTTPException(status_code=400, detail="컬럼 타입은 text, number, date 중 하나여야 합니다.")
     max_order = db.query(CustomColumn).filter(CustomColumn.table_id == table_id).count()
-    col = CustomColumn(table_id=table_id, column_name=body.column_name.strip(), column_type=body.column_type, sort_order=max_order)
+    col_name = body.column_name.strip()
+    col = CustomColumn(table_id=table_id, column_name=col_name, column_type=body.column_type, sort_order=max_order)
     db.add(col)
     db.commit()
     db.refresh(col)
+    sql_type = _COL_TYPE_MAP.get(body.column_type, "TEXT")
+    real_table = f"cdata_{table_id}"
+    db.execute(text(f'ALTER TABLE "{real_table}" ADD COLUMN IF NOT EXISTS "{col_name}" {sql_type}'))  # noqa: S608
+    db.commit()
     return {"id": col.id, "column_name": col.column_name, "column_type": col.column_type, "sort_order": col.sort_order}
 
 
@@ -557,12 +603,8 @@ def delete_column(table_id: int, column_id: int, db: Session = Depends(get_db), 
     col_name = col.column_name
     db.delete(col)
     db.commit()
-    # 해당 컬럼 키를 기존 행 데이터에서 제거
-    rows = db.query(CustomRow).filter(CustomRow.table_id == table_id).all()
-    for row in rows:
-        d = json.loads(row.data or "{}")
-        d.pop(col_name, None)
-        row.data = json.dumps(d, ensure_ascii=False)
+    real_table = f"cdata_{table_id}"
+    db.execute(text(f'ALTER TABLE "{real_table}" DROP COLUMN IF EXISTS "{col_name}"'))  # noqa: S608
     db.commit()
     return {"message": "컬럼이 삭제되었습니다."}
 
@@ -571,29 +613,36 @@ def delete_column(table_id: int, column_id: int, db: Session = Depends(get_db), 
 def add_row(table_id: int, body: UpsertRowRequest, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
     if not db.query(CustomTable).filter(CustomTable.id == table_id).first():
         raise HTTPException(status_code=404, detail="테이블을 찾을 수 없습니다.")
-    row = CustomRow(table_id=table_id, data=json.dumps(body.data, ensure_ascii=False))
-    db.add(row)
+    real_table = f"cdata_{table_id}"
+    if not body.data:
+        row_id = db.execute(text(f'INSERT INTO "{real_table}" DEFAULT VALUES RETURNING id, created_at')).fetchone()  # noqa: S608
+    else:
+        col_sql = ", ".join([f'"{k}"' for k in body.data])
+        val_sql = ", ".join([f":v{i}" for i in range(len(body.data))])
+        params = {f"v{i}": v for i, v in enumerate(body.data.values())}
+        row_id = db.execute(text(f'INSERT INTO "{real_table}" ({col_sql}) VALUES ({val_sql}) RETURNING id, created_at'), params).fetchone()  # noqa: S608
     db.commit()
-    db.refresh(row)
-    return {"id": row.id, "data": json.loads(row.data), "created_at": row.created_at}
+    return {"id": row_id[0], "data": body.data, "created_at": row_id[1]}
 
 
 @router.put("/data-tables/{table_id}/rows/{row_id}")
 def update_row(table_id: int, row_id: int, body: UpsertRowRequest, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
-    row = db.query(CustomRow).filter(CustomRow.id == row_id, CustomRow.table_id == table_id).first()
-    if not row:
-        raise HTTPException(status_code=404, detail="행을 찾을 수 없습니다.")
-    row.data = json.dumps(body.data, ensure_ascii=False)
+    real_table = f"cdata_{table_id}"
+    if not body.data:
+        db.execute(text(f'UPDATE "{real_table}" SET updated_at = NOW() WHERE id = :id'), {"id": row_id})  # noqa: S608
+    else:
+        set_sql = ", ".join([f'"{k}" = :v{i}' for i, k in enumerate(body.data)])
+        params = {f"v{i}": v for i, v in enumerate(body.data.values())}
+        params["id"] = row_id
+        db.execute(text(f'UPDATE "{real_table}" SET {set_sql}, updated_at = NOW() WHERE id = :id'), params)  # noqa: S608
     db.commit()
-    return {"id": row.id, "data": json.loads(row.data)}
+    return {"id": row_id, "data": body.data}
 
 
 @router.delete("/data-tables/{table_id}/rows/{row_id}")
 def delete_row(table_id: int, row_id: int, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
-    row = db.query(CustomRow).filter(CustomRow.id == row_id, CustomRow.table_id == table_id).first()
-    if not row:
-        raise HTTPException(status_code=404, detail="행을 찾을 수 없습니다.")
-    db.delete(row)
+    real_table = f"cdata_{table_id}"
+    db.execute(text(f'DELETE FROM "{real_table}" WHERE id = :id'), {"id": row_id})  # noqa: S608
     db.commit()
     return {"message": "행이 삭제되었습니다."}
 
@@ -604,15 +653,20 @@ def export_data_table(table_id: int, db: Session = Depends(get_db), _: None = De
     if not table:
         raise HTTPException(status_code=404, detail="테이블을 찾을 수 없습니다.")
     columns = db.query(CustomColumn).filter(CustomColumn.table_id == table_id).order_by(CustomColumn.sort_order, CustomColumn.id).all()
-    rows = db.query(CustomRow).filter(CustomRow.table_id == table_id).order_by(CustomRow.id).all()
     col_names = [c.column_name for c in columns]
+    real_table = f"cdata_{table_id}"
+    if col_names:
+        select_cols = ", ".join([f'"{cn}"' for cn in col_names])
+        raw_rows = db.execute(text(f'SELECT id, {select_cols}, created_at FROM "{real_table}" ORDER BY id')).fetchall()  # noqa: S608
+    else:
+        raw_rows = db.execute(text(f'SELECT id, created_at FROM "{real_table}" ORDER BY id')).fetchall()  # noqa: S608
     wb = Workbook()
     ws = wb.active
     ws.title = table.name[:31]
     ws.append(["ID"] + col_names + ["생성일시"])
-    for r in rows:
-        d = json.loads(r.data or "{}")
-        ws.append([r.id] + [d.get(c, "") for c in col_names] + [r.created_at.isoformat() if r.created_at else ""])
+    for r in raw_rows:
+        row_values = list(r[1:-1]) if col_names else []
+        ws.append([r[0]] + row_values + [r[-1].isoformat() if r[-1] else ""])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -631,6 +685,9 @@ def export_data_table(table_id: int, db: Session = Depends(get_db), _: None = De
 def list_db_tables(db: Session = Depends(get_db), _: None = Depends(verify_admin)):
     inspector = sa_inspect(db.bind)
     tables = sorted(inspector.get_table_names())
+    custom_meta: dict[str, tuple[str, str]] = {}
+    for ct in db.query(CustomTable).all():
+        custom_meta[f"cdata_{ct.id}"] = (ct.name, ct.description or "")
     result = []
     for table_name in tables:
         try:
@@ -638,7 +695,13 @@ def list_db_tables(db: Session = Depends(get_db), _: None = Depends(verify_admin
         except Exception:
             count = -1
         columns = [col["name"] for col in inspector.get_columns(table_name)]
-        result.append({"name": table_name, "row_count": count, "columns": columns})
+        if table_name in custom_meta:
+            display_name, description = custom_meta[table_name]
+            display_name = f"[데이터] {display_name}"
+        else:
+            display_name = table_name
+            description = TABLE_DESCRIPTIONS.get(table_name, "")
+        result.append({"name": table_name, "display_name": display_name, "description": description, "row_count": count, "columns": columns})
     return {"tables": result}
 
 
@@ -658,14 +721,24 @@ def browse_db_table(
     columns = [col["name"] for col in inspector.get_columns(table_name)]
     offset = (page - 1) * limit
     total = db.execute(text(f'SELECT COUNT(*) FROM "{table_name}"')).scalar() or 0  # noqa: S608
-    rows_result = db.execute(
-        text(f'SELECT * FROM "{table_name}" ORDER BY id DESC LIMIT :limit OFFSET :offset'),  # noqa: S608
-        {"limit": limit, "offset": offset},
-    ).fetchall()
+    try:
+        rows_result = db.execute(
+            text(f'SELECT * FROM "{table_name}" ORDER BY id DESC LIMIT :limit OFFSET :offset'),  # noqa: S608
+            {"limit": limit, "offset": offset},
+        ).fetchall()
+    except Exception:
+        rows_result = db.execute(
+            text(f'SELECT * FROM "{table_name}" LIMIT :limit OFFSET :offset'),  # noqa: S608
+            {"limit": limit, "offset": offset},
+        ).fetchall()
 
     def _serialize(v):
         if isinstance(v, datetime):
             return v.isoformat()
+        if isinstance(v, (date, time)):
+            return str(v)
+        if isinstance(v, str):
+            return decrypt_if_needed(v) or v
         return v
 
     rows = [dict(zip(columns, [_serialize(v) for v in row])) for row in rows_result]

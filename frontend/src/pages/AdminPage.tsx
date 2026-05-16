@@ -1124,8 +1124,11 @@ export default function AdminPage() {
                       onClick={() => void handleSelectDbTable(t.name)}
                       className={`w-full rounded-xl px-3 py-2 text-left ${selectedDbTable === t.name ? 'bg-slate-900 text-white' : 'hover:bg-slate-100 text-slate-700'}`}
                     >
-                      <div className="truncate text-sm font-medium">{t.name}</div>
-                      <div className={`text-xs ${selectedDbTable === t.name ? 'text-slate-300' : 'text-slate-400'}`}>{t.row_count.toLocaleString()}행</div>
+                      <div className="truncate text-sm font-medium">{t.display_name || t.name}</div>
+                      {t.description && (
+                        <div className={`truncate text-xs ${selectedDbTable === t.name ? 'text-slate-300' : 'text-slate-500'}`}>{t.description}</div>
+                      )}
+                      <div className={`text-xs ${selectedDbTable === t.name ? 'text-slate-400' : 'text-slate-400'}`}>{t.row_count.toLocaleString()}행</div>
                     </button>
                   ))}
                 </div>
@@ -1146,8 +1149,16 @@ export default function AdminPage() {
                 <div className="rounded-3xl bg-white p-5 shadow-sm">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="font-semibold text-slate-900">{selectedDbTable}</h2>
-                      <p className="text-xs text-slate-400">전체 {dbTableData.total.toLocaleString()}행 · {dbTableData.page}페이지</p>
+                      {(() => {
+                        const meta = dbTables.find((t) => t.name === selectedDbTable);
+                        return (
+                          <>
+                            <h2 className="font-semibold text-slate-900">{meta?.display_name || selectedDbTable}</h2>
+                            {meta?.description && <p className="text-xs text-slate-500">{meta.description}</p>}
+                            <p className="text-xs text-slate-400">전체 {dbTableData.total.toLocaleString()}행 · {dbTableData.page}페이지 · <span className="font-mono">{selectedDbTable}</span></p>
+                          </>
+                        );
+                      })()}
                     </div>
                     <div className="flex gap-2">
                       <button onClick={() => void loadDbTableData(selectedDbTable, dbPage - 1)} disabled={dbPage <= 1} className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm disabled:opacity-30">← 이전</button>
