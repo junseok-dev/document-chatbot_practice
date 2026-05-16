@@ -8,6 +8,10 @@ import {
   AdminSessionDetail,
   ChatLog,
   ChatResponse,
+  CustomColumnDef,
+  CustomRowData,
+  CustomTableDetail,
+  CustomTableSummary,
   ProcessingLog,
   PromptConfig,
   PromptPayload,
@@ -254,5 +258,58 @@ export const adminApi = {
       responseType: 'blob',
     });
     return response.data;
+  },
+
+  // 커스텀 데이터 테이블
+  getDataTables: async (): Promise<{ tables: CustomTableSummary[] }> => {
+    const response = await adminApiClient.get('/admin/data-tables');
+    return response.data;
+  },
+
+  createDataTable: async (name: string, description: string): Promise<CustomTableSummary> => {
+    const response = await adminApiClient.post('/admin/data-tables', { name, description });
+    return response.data;
+  },
+
+  deleteDataTable: async (tableId: number): Promise<void> => {
+    await adminApiClient.delete(`/admin/data-tables/${tableId}`);
+  },
+
+  getDataTable: async (tableId: number): Promise<CustomTableDetail> => {
+    const response = await adminApiClient.get(`/admin/data-tables/${tableId}`);
+    return response.data;
+  },
+
+  addColumn: async (tableId: number, column_name: string, column_type: string): Promise<CustomColumnDef> => {
+    const response = await adminApiClient.post(`/admin/data-tables/${tableId}/columns`, { column_name, column_type });
+    return response.data;
+  },
+
+  deleteColumn: async (tableId: number, columnId: number): Promise<void> => {
+    await adminApiClient.delete(`/admin/data-tables/${tableId}/columns/${columnId}`);
+  },
+
+  addRow: async (tableId: number, data: Record<string, string>): Promise<CustomRowData> => {
+    const response = await adminApiClient.post(`/admin/data-tables/${tableId}/rows`, { data });
+    return response.data;
+  },
+
+  updateRow: async (tableId: number, rowId: number, data: Record<string, string>): Promise<CustomRowData> => {
+    const response = await adminApiClient.put(`/admin/data-tables/${tableId}/rows/${rowId}`, { data });
+    return response.data;
+  },
+
+  deleteRow: async (tableId: number, rowId: number): Promise<void> => {
+    await adminApiClient.delete(`/admin/data-tables/${tableId}/rows/${rowId}`);
+  },
+
+  exportDataTable: async (tableId: number, tableName: string): Promise<void> => {
+    const response = await adminApiClient.get(`/admin/data-tables/${tableId}/export`, { responseType: 'blob' });
+    const url = window.URL.createObjectURL(response.data);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${tableName}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    link.click();
+    window.URL.revokeObjectURL(url);
   },
 };

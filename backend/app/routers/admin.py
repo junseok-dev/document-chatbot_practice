@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db.crud import get_all_sessions, get_session_messages
 from app.db.database import get_db
-from app.db.models import AdminAuditLog, ChatLog, ChatSession, DocumentRecord, FaqRecord, ProcessingLog, PromptConfig
+from app.db.models import AdminAuditLog, ChatLog, ChatSession, CustomColumn, CustomRow, CustomTable, DocumentRecord, FaqRecord, ProcessingLog, PromptConfig
 from app.models.session import MessageDetail, SessionDetail, SessionSummary
 from app.services.admin_service import (
     approve_document,
@@ -187,7 +187,7 @@ def _build_workbook(rows: list[dict]) -> bytes:
     return buffer.getvalue()
 
 
-def _filter_chat_logs(db: Session, start_date: date | None = None, end_date: date | None = None, session_id: str | None = None) -> list[ChatLog]:
+def _filter_chat_logs(db: Session, start_date: date | None = None, end_date: date | None = None, session_id: str | None = None, limit: int = 500) -> list[ChatLog]:
     query = db.query(ChatLog)
     if start_date:
         query = query.filter(ChatLog.created_at >= datetime.combine(start_date, time.min))
@@ -195,7 +195,7 @@ def _filter_chat_logs(db: Session, start_date: date | None = None, end_date: dat
         query = query.filter(ChatLog.created_at <= datetime.combine(end_date, time.max))
     if session_id:
         query = query.filter(ChatLog.session_id == session_id)
-    return query.order_by(ChatLog.created_at.desc()).all()
+    return query.order_by(ChatLog.created_at.desc()).limit(limit).all()
 
 
 @router.get("/sessions", response_model=list[SessionSummary])
@@ -459,6 +459,165 @@ def export_chat_logs(start_date: date | None = None, end_date: date | None = Non
     filename = f"chat_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     return Response(
         content=payload,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ── 커스텀 데이터 관리 ──────────────────────────────────────────
+
+
+class CreateTableRequest(BaseModel):
+    name: str
+    description: str = ""
+
+
+class CreateColumnRequest(BaseModel):
+    column_name: str
+    column_type: str = "text"  # text | number | date
+
+
+class UpsertRowRequest(BaseModel):
+    data: dict
+
+
+@router.get("/data-tables")
+def list_data_tables(db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    tables = db.query(CustomTable).order_by(CustomTable.created_at.desc()).all()
+    result = []
+    for t in tables:
+        row_count = db.query(CustomRow).filter(CustomRow.table_id == t.id).count()
+        result.append({"id": t.id, "name": t.name, "description": t.description, "row_count": row_count, "created_at": t.created_at})
+    return {"tables": result}
+
+
+@router.post("/data-tables", status_code=201)
+def create_data_table(body: CreateTableRequest, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    if not body.name.strip():
+        raise HTTPException(status_code=400, detail="테이블 이름을 입력해주세요.")
+    table = CustomTable(name=body.name.strip(), description=body.description.strip())
+    db.add(table)
+    db.commit()
+    db.refresh(table)
+    create_audit_log(db, "data_table_created", "custom_table", str(table.id), body.name)
+    return {"id": table.id, "name": table.name, "description": table.description}
+
+
+@router.delete("/data-tables/{table_id}")
+def delete_data_table(table_id: int, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    table = db.query(CustomTable).filter(CustomTable.id == table_id).first()
+    if not table:
+        raise HTTPException(status_code=404, detail="테이블을 찾을 수 없습니다.")
+    db.query(CustomRow).filter(CustomRow.table_id == table_id).delete()
+    db.query(CustomColumn).filter(CustomColumn.table_id == table_id).delete()
+    db.delete(table)
+    db.commit()
+    create_audit_log(db, "data_table_deleted", "custom_table", str(table_id), table.name)
+    return {"message": "삭제되었습니다."}
+
+
+@router.get("/data-tables/{table_id}")
+def get_data_table(table_id: int, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    table = db.query(CustomTable).filter(CustomTable.id == table_id).first()
+    if not table:
+        raise HTTPException(status_code=404, detail="테이블을 찾을 수 없습니다.")
+    columns = db.query(CustomColumn).filter(CustomColumn.table_id == table_id).order_by(CustomColumn.sort_order, CustomColumn.id).all()
+    rows = db.query(CustomRow).filter(CustomRow.table_id == table_id).order_by(CustomRow.id).all()
+    return {
+        "id": table.id,
+        "name": table.name,
+        "description": table.description,
+        "columns": [{"id": c.id, "column_name": c.column_name, "column_type": c.column_type, "sort_order": c.sort_order} for c in columns],
+        "rows": [{"id": r.id, "data": json.loads(r.data or "{}"), "created_at": r.created_at} for r in rows],
+    }
+
+
+@router.post("/data-tables/{table_id}/columns", status_code=201)
+def add_column(table_id: int, body: CreateColumnRequest, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    if not db.query(CustomTable).filter(CustomTable.id == table_id).first():
+        raise HTTPException(status_code=404, detail="테이블을 찾을 수 없습니다.")
+    if not body.column_name.strip():
+        raise HTTPException(status_code=400, detail="컬럼 이름을 입력해주세요.")
+    if body.column_type not in ("text", "number", "date"):
+        raise HTTPException(status_code=400, detail="컬럼 타입은 text, number, date 중 하나여야 합니다.")
+    max_order = db.query(CustomColumn).filter(CustomColumn.table_id == table_id).count()
+    col = CustomColumn(table_id=table_id, column_name=body.column_name.strip(), column_type=body.column_type, sort_order=max_order)
+    db.add(col)
+    db.commit()
+    db.refresh(col)
+    return {"id": col.id, "column_name": col.column_name, "column_type": col.column_type, "sort_order": col.sort_order}
+
+
+@router.delete("/data-tables/{table_id}/columns/{column_id}")
+def delete_column(table_id: int, column_id: int, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    col = db.query(CustomColumn).filter(CustomColumn.id == column_id, CustomColumn.table_id == table_id).first()
+    if not col:
+        raise HTTPException(status_code=404, detail="컬럼을 찾을 수 없습니다.")
+    col_name = col.column_name
+    db.delete(col)
+    db.commit()
+    # 해당 컬럼 키를 기존 행 데이터에서 제거
+    rows = db.query(CustomRow).filter(CustomRow.table_id == table_id).all()
+    for row in rows:
+        d = json.loads(row.data or "{}")
+        d.pop(col_name, None)
+        row.data = json.dumps(d, ensure_ascii=False)
+    db.commit()
+    return {"message": "컬럼이 삭제되었습니다."}
+
+
+@router.post("/data-tables/{table_id}/rows", status_code=201)
+def add_row(table_id: int, body: UpsertRowRequest, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    if not db.query(CustomTable).filter(CustomTable.id == table_id).first():
+        raise HTTPException(status_code=404, detail="테이블을 찾을 수 없습니다.")
+    row = CustomRow(table_id=table_id, data=json.dumps(body.data, ensure_ascii=False))
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id, "data": json.loads(row.data), "created_at": row.created_at}
+
+
+@router.put("/data-tables/{table_id}/rows/{row_id}")
+def update_row(table_id: int, row_id: int, body: UpsertRowRequest, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    row = db.query(CustomRow).filter(CustomRow.id == row_id, CustomRow.table_id == table_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="행을 찾을 수 없습니다.")
+    row.data = json.dumps(body.data, ensure_ascii=False)
+    db.commit()
+    return {"id": row.id, "data": json.loads(row.data)}
+
+
+@router.delete("/data-tables/{table_id}/rows/{row_id}")
+def delete_row(table_id: int, row_id: int, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    row = db.query(CustomRow).filter(CustomRow.id == row_id, CustomRow.table_id == table_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="행을 찾을 수 없습니다.")
+    db.delete(row)
+    db.commit()
+    return {"message": "행이 삭제되었습니다."}
+
+
+@router.get("/data-tables/{table_id}/export")
+def export_data_table(table_id: int, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    table = db.query(CustomTable).filter(CustomTable.id == table_id).first()
+    if not table:
+        raise HTTPException(status_code=404, detail="테이블을 찾을 수 없습니다.")
+    columns = db.query(CustomColumn).filter(CustomColumn.table_id == table_id).order_by(CustomColumn.sort_order, CustomColumn.id).all()
+    rows = db.query(CustomRow).filter(CustomRow.table_id == table_id).order_by(CustomRow.id).all()
+    col_names = [c.column_name for c in columns]
+    wb = Workbook()
+    ws = wb.active
+    ws.title = table.name[:31]
+    ws.append(["ID"] + col_names + ["생성일시"])
+    for r in rows:
+        d = json.loads(r.data or "{}")
+        ws.append([r.id] + [d.get(c, "") for c in col_names] + [r.created_at.isoformat() if r.created_at else ""])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"{table.name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return Response(
+        content=buf.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

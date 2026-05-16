@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, Text, String
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, Text, String
 from sqlalchemy.sql import func
 
 from app.db.database import Base
@@ -138,3 +138,33 @@ class AdminAuditLog(Base):
     target_id = Column(String(100), nullable=True)
     detail = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class CustomTable(Base):
+    __tablename__ = "custom_tables"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class CustomColumn(Base):
+    __tablename__ = "custom_columns"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    table_id = Column(Integer, ForeignKey("custom_tables.id"), nullable=False, index=True)
+    column_name = Column(String(100), nullable=False)
+    column_type = Column(String(20), nullable=False, default="text")  # text | number | date
+    sort_order = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class CustomRow(Base):
+    __tablename__ = "custom_rows"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    table_id = Column(Integer, ForeignKey("custom_tables.id"), nullable=False, index=True)
+    data = Column(Text, nullable=False, default="{}")  # JSON {"column_name": value}
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

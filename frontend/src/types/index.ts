@@ -141,3 +141,32 @@ export interface PromptPayload {
   label: string;
   content: string;
 }
+
+export interface CustomTableSummary {
+  id: number;
+  name: string;
+  description: string | null;
+  row_count: number;
+  created_at: string;
+}
+
+export interface CustomColumnDef {
+  id: number;
+  column_name: string;
+  column_type: 'text' | 'number' | 'date';
+  sort_order: number;
+}
+
+export interface CustomRowData {
+  id: number;
+  data: Record<string, string>;
+  created_at: string;
+}
+
+export interface CustomTableDetail {
+  id: number;
+  name: string;
+  description: string | null;
+  columns: CustomColumnDef[];
+  rows: CustomRowData[];
+}

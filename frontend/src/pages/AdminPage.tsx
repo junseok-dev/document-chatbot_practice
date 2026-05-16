@@ -8,12 +8,14 @@ import {
   AdminSession,
   AuditLog,
   ChatLog,
+  CustomTableDetail,
+  CustomTableSummary,
   ProcessingLog,
   PromptConfig,
   PromptPayload,
 } from '../types';
 
-type TabKey = 'documents' | 'faqs' | 'prompts' | 'chats';
+type TabKey = 'documents' | 'faqs' | 'prompts' | 'chats' | 'data';
 
 const EMPTY_FAQ: AdminFaq = {
   id: '',
@@ -99,6 +101,18 @@ export default function AdminPage() {
   const [chatLoading, setChatLoading] = useState(false);
   const [chatExporting, setChatExporting] = useState(false);
 
+  // 데이터 관리
+  const [dataTables, setDataTables] = useState<CustomTableSummary[]>([]);
+  const [selectedTable, setSelectedTable] = useState<CustomTableDetail | null>(null);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [showNewTableForm, setShowNewTableForm] = useState(false);
+  const [newTableName, setNewTableName] = useState('');
+  const [newTableDesc, setNewTableDesc] = useState('');
+  const [newColName, setNewColName] = useState('');
+  const [newColType, setNewColType] = useState('text');
+  const [editingRow, setEditingRow] = useState<{ id: number | null; data: Record<string, string> } | null>(null);
+  const [dataExporting, setDataExporting] = useState(false);
+
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const mdInputRef = useRef<HTMLInputElement>(null);
   const faqMdInputRef = useRef<HTMLInputElement>(null);
@@ -140,7 +154,10 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
-    if (authenticated) void loadDashboard();
+    if (authenticated) {
+      void loadDashboard();
+      void loadDataTables();
+    }
   }, [authenticated]);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -337,6 +354,10 @@ export default function AdminPage() {
         session_id: chatSessionId || undefined,
       });
       setChatLogs(result.chat_logs);
+      if (result.chat_logs.length === 0) setNotice('조회 결과가 없습니다.');
+      else setNotice(`${result.chat_logs.length}건 조회되었습니다.`);
+    } catch {
+      setNotice('대화 로그 조회에 실패했습니다.');
     } finally {
       setChatLoading(false);
     }
@@ -361,6 +382,118 @@ export default function AdminPage() {
       setNotice('엑셀 다운로드에 실패했습니다.');
     } finally {
       setChatExporting(false);
+    }
+  };
+
+  // ── 데이터 관리 핸들러 ──────────────────────────────────────
+  const loadDataTables = async () => {
+    try {
+      const result = await adminApi.getDataTables();
+      setDataTables(result.tables);
+    } catch {
+      setNotice('테이블 목록을 불러오지 못했습니다.');
+    }
+  };
+
+  const loadTableDetail = async (tableId: number) => {
+    setDataLoading(true);
+    try {
+      const detail = await adminApi.getDataTable(tableId);
+      setSelectedTable(detail);
+      setEditingRow(null);
+    } catch {
+      setNotice('테이블 데이터를 불러오지 못했습니다.');
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
+  const handleCreateTable = async () => {
+    if (!newTableName.trim()) return;
+    try {
+      await adminApi.createDataTable(newTableName.trim(), newTableDesc.trim());
+      setNewTableName('');
+      setNewTableDesc('');
+      setShowNewTableForm(false);
+      await loadDataTables();
+      setNotice('테이블이 생성되었습니다.');
+    } catch {
+      setNotice('테이블 생성에 실패했습니다.');
+    }
+  };
+
+  const handleDeleteTable = async (tableId: number) => {
+    if (!confirm('테이블과 모든 데이터가 삭제됩니다. 계속하시겠어요?')) return;
+    try {
+      await adminApi.deleteDataTable(tableId);
+      if (selectedTable?.id === tableId) setSelectedTable(null);
+      await loadDataTables();
+      setNotice('테이블이 삭제되었습니다.');
+    } catch {
+      setNotice('테이블 삭제에 실패했습니다.');
+    }
+  };
+
+  const handleAddColumn = async () => {
+    if (!selectedTable || !newColName.trim()) return;
+    try {
+      await adminApi.addColumn(selectedTable.id, newColName.trim(), newColType);
+      setNewColName('');
+      setNewColType('text');
+      await loadTableDetail(selectedTable.id);
+    } catch {
+      setNotice('컬럼 추가에 실패했습니다.');
+    }
+  };
+
+  const handleDeleteColumn = async (colId: number) => {
+    if (!selectedTable) return;
+    if (!confirm('이 컬럼과 해당 데이터가 삭제됩니다.')) return;
+    try {
+      await adminApi.deleteColumn(selectedTable.id, colId);
+      await loadTableDetail(selectedTable.id);
+    } catch {
+      setNotice('컬럼 삭제에 실패했습니다.');
+    }
+  };
+
+  const handleSaveRow = async () => {
+    if (!selectedTable || !editingRow) return;
+    try {
+      if (editingRow.id === null) {
+        await adminApi.addRow(selectedTable.id, editingRow.data);
+      } else {
+        await adminApi.updateRow(selectedTable.id, editingRow.id, editingRow.data);
+      }
+      setEditingRow(null);
+      await loadTableDetail(selectedTable.id);
+      await loadDataTables();
+    } catch {
+      setNotice('저장에 실패했습니다.');
+    }
+  };
+
+  const handleDeleteRow = async (rowId: number) => {
+    if (!selectedTable) return;
+    try {
+      await adminApi.deleteRow(selectedTable.id, rowId);
+      await loadTableDetail(selectedTable.id);
+      await loadDataTables();
+    } catch {
+      setNotice('행 삭제에 실패했습니다.');
+    }
+  };
+
+  const handleExportTable = async () => {
+    if (!selectedTable) return;
+    setDataExporting(true);
+    try {
+      await adminApi.exportDataTable(selectedTable.id, selectedTable.name);
+      setNotice('엑셀 파일이 다운로드되었습니다.');
+    } catch {
+      setNotice('엑셀 다운로드에 실패했습니다.');
+    } finally {
+      setDataExporting(false);
     }
   };
 
@@ -426,6 +559,7 @@ export default function AdminPage() {
             ['faqs', 'FAQ 관리'],
             ['prompts', '프롬프트'],
             ['chats', '로그/내보내기'],
+            ['data', '데이터 관리'],
           ] as [TabKey, string][]).map(([key, label]) => (
             <button key={key} onClick={() => setActiveTab(key)} className={`rounded-full px-4 py-2 text-sm font-medium ${activeTab === key ? 'bg-slate-900 text-white' : 'bg-white text-slate-600'}`}>
               {label}
@@ -654,10 +788,13 @@ export default function AdminPage() {
               <div className="mt-4 grid gap-4 md:grid-cols-4">
                 <input type="date" value={chatStartDate} onChange={(e) => setChatStartDate(e.target.value)} className={INPUT_CLASS} />
                 <input type="date" value={chatEndDate} onChange={(e) => setChatEndDate(e.target.value)} className={INPUT_CLASS} />
-                <input value={chatSessionId} onChange={(e) => setChatSessionId(e.target.value)} placeholder="세션 ID" className={INPUT_CLASS} />
+                <div>
+                  <input value={chatSessionId} onChange={(e) => setChatSessionId(e.target.value)} placeholder="세션 ID (선택)" className={INPUT_CLASS} />
+                  <p className="mt-1 text-xs text-slate-400">날짜·세션 ID 모두 선택사항입니다</p>
+                </div>
                 <div className="flex gap-2">
-                  <button onClick={() => void handleFilterChatLogs()} disabled={chatLoading} className="flex-1 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">조회</button>
-                  <button onClick={() => void handleExportChatLogs()} disabled={chatExporting} className="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">엑셀</button>
+                  <button onClick={() => void handleFilterChatLogs()} disabled={chatLoading} className="flex-1 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{chatLoading ? '조회 중...' : '조회'}</button>
+                  <button onClick={() => void handleExportChatLogs()} disabled={chatExporting} className="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{chatExporting ? '처리 중...' : '엑셀'}</button>
                 </div>
               </div>
               <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto">
@@ -736,6 +873,180 @@ export default function AdminPage() {
                 </table>
               </div>
             </section>
+          </div>
+        )}
+
+        {activeTab === 'data' && (
+          <div className="mt-6 flex gap-6">
+            {/* 왼쪽: 테이블 목록 */}
+            <div className="w-64 shrink-0">
+              <div className="rounded-3xl bg-white p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-semibold text-slate-900">테이블 목록</h2>
+                  <button onClick={() => setShowNewTableForm((v) => !v)} className="rounded-lg bg-slate-900 px-2 py-1 text-xs font-medium text-white">+ 새 테이블</button>
+                </div>
+                {showNewTableForm && (
+                  <div className="mt-3 space-y-2">
+                    <input value={newTableName} onChange={(e) => setNewTableName(e.target.value)} placeholder="테이블 이름 *" className={INPUT_CLASS} />
+                    <input value={newTableDesc} onChange={(e) => setNewTableDesc(e.target.value)} placeholder="설명 (선택)" className={INPUT_CLASS} />
+                    <div className="flex gap-2">
+                      <button onClick={() => void handleCreateTable()} disabled={!newTableName.trim()} className="flex-1 rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40">만들기</button>
+                      <button onClick={() => { setShowNewTableForm(false); setNewTableName(''); setNewTableDesc(''); }} className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs text-slate-600">취소</button>
+                    </div>
+                  </div>
+                )}
+                <div className="mt-3 space-y-1">
+                  {dataTables.length === 0 && <p className="text-xs text-slate-400">테이블이 없습니다.</p>}
+                  {dataTables.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => void loadTableDetail(t.id)}
+                      className={`w-full rounded-xl px-3 py-2 text-left text-sm ${selectedTable?.id === t.id ? 'bg-slate-900 text-white' : 'hover:bg-slate-100 text-slate-700'}`}
+                    >
+                      <div className="font-medium">{t.name}</div>
+                      <div className={`text-xs ${selectedTable?.id === t.id ? 'text-slate-300' : 'text-slate-400'}`}>{t.row_count}행</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* 오른쪽: 테이블 상세 */}
+            <div className="min-w-0 flex-1">
+              {!selectedTable ? (
+                <div className="flex h-64 items-center justify-center rounded-3xl bg-white shadow-sm">
+                  <p className="text-slate-400">왼쪽에서 테이블을 선택하거나 새로 만들어 주세요.</p>
+                </div>
+              ) : dataLoading ? (
+                <div className="flex h-64 items-center justify-center rounded-3xl bg-white shadow-sm">
+                  <p className="text-slate-400">불러오는 중...</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* 헤더 */}
+                  <div className="rounded-3xl bg-white p-5 shadow-sm">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h2 className="text-lg font-semibold text-slate-900">{selectedTable.name}</h2>
+                        {selectedTable.description && <p className="mt-1 text-sm text-slate-500">{selectedTable.description}</p>}
+                      </div>
+                      <div className="flex shrink-0 gap-2">
+                        <button onClick={() => void handleExportTable()} disabled={dataExporting} className="rounded-xl bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">{dataExporting ? '처리 중...' : '엑셀 다운로드'}</button>
+                        <button onClick={() => void handleDeleteTable(selectedTable.id)} className="rounded-xl bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-600 hover:bg-rose-100">테이블 삭제</button>
+                      </div>
+                    </div>
+
+                    {/* 컬럼 관리 */}
+                    <div className="mt-4 border-t border-slate-100 pt-4">
+                      <h3 className="mb-2 text-sm font-medium text-slate-700">컬럼 관리</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedTable.columns.map((col) => (
+                          <span key={col.id} className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-700">
+                            {col.column_name}
+                            <span className="text-slate-400">({col.column_type})</span>
+                            <button onClick={() => void handleDeleteColumn(col.id)} className="ml-1 text-slate-400 hover:text-rose-500">×</button>
+                          </span>
+                        ))}
+                        <div className="flex items-center gap-1">
+                          <input value={newColName} onChange={(e) => setNewColName(e.target.value)} placeholder="컬럼 이름" className="w-28 rounded-full border border-slate-200 px-3 py-1 text-xs outline-none focus:border-slate-400" onKeyDown={(e) => { if (e.key === 'Enter') void handleAddColumn(); }} />
+                          <select value={newColType} onChange={(e) => setNewColType(e.target.value)} className="rounded-full border border-slate-200 px-2 py-1 text-xs outline-none">
+                            <option value="text">텍스트</option>
+                            <option value="number">숫자</option>
+                            <option value="date">날짜</option>
+                          </select>
+                          <button onClick={() => void handleAddColumn()} disabled={!newColName.trim()} className="rounded-full bg-slate-900 px-3 py-1 text-xs font-medium text-white disabled:opacity-40">+ 추가</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 데이터 테이블 */}
+                  <div className="rounded-3xl bg-white p-5 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-slate-700">데이터 ({selectedTable.rows.length}행)</h3>
+                      <button
+                        onClick={() => setEditingRow({ id: null, data: Object.fromEntries(selectedTable.columns.map((c) => [c.column_name, ''])) })}
+                        className="rounded-xl bg-slate-900 px-3 py-1.5 text-sm font-medium text-white"
+                      >+ 행 추가</button>
+                    </div>
+
+                    {selectedTable.columns.length === 0 ? (
+                      <p className="mt-4 text-sm text-slate-400">먼저 컬럼을 추가해 주세요.</p>
+                    ) : (
+                      <div className="mt-3 overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-slate-100 text-left text-xs text-slate-500">
+                              {selectedTable.columns.map((col) => (
+                                <th key={col.id} className="pb-2 pr-4 font-medium">{col.column_name}</th>
+                              ))}
+                              <th className="pb-2 font-medium">작업</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50">
+                            {/* 새 행 입력 폼 */}
+                            {editingRow && editingRow.id === null && (
+                              <tr className="bg-slate-50">
+                                {selectedTable.columns.map((col) => (
+                                  <td key={col.id} className="py-2 pr-4">
+                                    <input
+                                      type={col.column_type === 'number' ? 'number' : col.column_type === 'date' ? 'date' : 'text'}
+                                      value={editingRow.data[col.column_name] ?? ''}
+                                      onChange={(e) => setEditingRow((prev) => prev ? { ...prev, data: { ...prev.data, [col.column_name]: e.target.value } } : null)}
+                                      className="w-full rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:border-slate-400"
+                                    />
+                                  </td>
+                                ))}
+                                <td className="py-2">
+                                  <div className="flex gap-1">
+                                    <button onClick={() => void handleSaveRow()} className="rounded-lg bg-slate-900 px-2 py-1 text-xs font-medium text-white">저장</button>
+                                    <button onClick={() => setEditingRow(null)} className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-600">취소</button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                            {selectedTable.rows.map((row) => (
+                              <tr key={row.id} className="hover:bg-slate-50">
+                                {selectedTable.columns.map((col) => (
+                                  <td key={col.id} className="py-2 pr-4">
+                                    {editingRow?.id === row.id ? (
+                                      <input
+                                        type={col.column_type === 'number' ? 'number' : col.column_type === 'date' ? 'date' : 'text'}
+                                        value={editingRow.data[col.column_name] ?? ''}
+                                        onChange={(e) => setEditingRow((prev) => prev ? { ...prev, data: { ...prev.data, [col.column_name]: e.target.value } } : null)}
+                                        className="w-full rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:border-slate-400"
+                                      />
+                                    ) : (
+                                      <span className="text-slate-800">{row.data[col.column_name] ?? ''}</span>
+                                    )}
+                                  </td>
+                                ))}
+                                <td className="py-2">
+                                  {editingRow?.id === row.id ? (
+                                    <div className="flex gap-1">
+                                      <button onClick={() => void handleSaveRow()} className="rounded-lg bg-slate-900 px-2 py-1 text-xs font-medium text-white">저장</button>
+                                      <button onClick={() => setEditingRow(null)} className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-600">취소</button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex gap-1">
+                                      <button onClick={() => setEditingRow({ id: row.id, data: { ...row.data } })} className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:border-slate-400">수정</button>
+                                      <button onClick={() => void handleDeleteRow(row.id)} className="rounded-lg border border-rose-200 px-2 py-1 text-xs text-rose-500 hover:bg-rose-50">삭제</button>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                            {selectedTable.rows.length === 0 && !editingRow && (
+                              <tr><td colSpan={selectedTable.columns.length + 1} className="py-6 text-center text-sm text-slate-400">데이터가 없습니다. 행을 추가해 주세요.</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
