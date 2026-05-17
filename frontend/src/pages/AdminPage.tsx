@@ -29,52 +29,77 @@ interface ModelMeta {
   ctx: string;
   inputPrice: number;
   outputPrice: number;
+  intelligence: number; // 1~10: 원시 추론·지시 이행 능력
+  recommend: number;    // 1~10: 챗봇 운영 추천도
   badge?: string;
   legacy?: boolean;
 }
 
+// 속도 문자열 → 정렬용 숫자 (낮을수록 빠름)
+const SPEED_RANK: Record<string, number> = {
+  '매우 빠름': 1, '빠름': 2, '중간': 3, '느림': 4, '미확인': 5,
+};
+
 const MODEL_DB: Record<string, ModelMeta> = {
   // ── GPT-4.1 계열 (2025.04 출시, 현재 최신) ───────────────
-  'gpt-4.1':      { desc: '2025년 4월 출시 최신 플래그십. gpt-4o보다 코딩·지시 이행 성능 높고 가격은 20% 저렴. 컨텍스트 1M 토큰으로 긴 문서에 유리. 챗봇 운영 최우선 권장', speed: '중간', ctx: '1M', inputPrice: 2.00, outputPrice: 8.00, badge: '최신' },
-  'gpt-4.1-mini': { desc: '4.1의 경량판. gpt-4o-mini보다 성능 개선, 가격은 비슷. FAQ 답변·요약·분류 등 일상적 챗봇 응답에 최적. 비용과 품질의 균형이 가장 좋음', speed: '빠름', ctx: '1M', inputPrice: 0.20, outputPrice: 0.80, badge: '추천' },
-  'gpt-4.1-nano': { desc: '초경량 초저가 모델. 단순 키워드 매핑·짧은 라벨링·빠른 분류에 한정 사용. 복잡한 질문에는 엉뚱한 답변 가능성 높아 챗봇 메인 모델로 부적합', speed: '매우 빠름', ctx: '1M', inputPrice: 0.05, outputPrice: 0.20 },
+  'gpt-4.1':      { desc: '2025년 4월 출시 최신 플래그십. gpt-4o보다 코딩·지시 이행 성능 높고 가격은 20% 저렴. 컨텍스트 1M 토큰으로 긴 문서에 유리. 챗봇 운영 최우선 권장', speed: '중간', ctx: '1M', inputPrice: 2.00, outputPrice: 8.00, intelligence: 9, recommend: 10, badge: '최신' },
+  'gpt-4.1-mini': { desc: '4.1의 경량판. gpt-4o-mini보다 성능 개선, 가격은 비슷. FAQ 답변·요약·분류 등 일상적 챗봇 응답에 최적. 비용과 품질의 균형이 가장 좋음', speed: '빠름', ctx: '1M', inputPrice: 0.20, outputPrice: 0.80, intelligence: 7, recommend: 10, badge: '추천' },
+  'gpt-4.1-nano': { desc: '초경량 초저가 모델. 단순 키워드 매핑·짧은 라벨링·빠른 분류에 한정 사용. 복잡한 질문에는 엉뚱한 답변 가능성 높아 챗봇 메인 모델로 부적합', speed: '매우 빠름', ctx: '1M', inputPrice: 0.05, outputPrice: 0.20, intelligence: 4, recommend: 4 },
   // ── GPT-4o 계열 ──────────────────────────────────────────
-  'gpt-4o':       { desc: '2024년 플래그십. gpt-4.1 출시 전까지 최고 성능. 지시 이행·추론·코드 생성 균형 우수. gpt-4.1로의 전환을 고려할 수 있으나 현재도 충분히 좋은 선택', speed: '중간', ctx: '128K', inputPrice: 2.50, outputPrice: 10.00 },
-  'gpt-4o-mini':  { desc: '가장 많이 쓰이는 경량 모델. gpt-4o 대비 94% 저렴하지만 복잡한 다단계 추론에선 오류 발생. 단순 FAQ·요약 등에 적합. gpt-4.1-mini로 대체 검토 권장', speed: '빠름', ctx: '128K', inputPrice: 0.15, outputPrice: 0.60 },
+  'gpt-4o':       { desc: '2024년 플래그십. gpt-4.1 출시 전까지 최고 성능. 지시 이행·추론·코드 생성 균형 우수. gpt-4.1로의 전환을 고려할 수 있으나 현재도 충분히 좋은 선택', speed: '중간', ctx: '128K', inputPrice: 2.50, outputPrice: 10.00, intelligence: 8, recommend: 8 },
+  'gpt-4o-mini':  { desc: '가장 많이 쓰이는 경량 모델. gpt-4o 대비 94% 저렴하지만 복잡한 다단계 추론에선 오류 발생. 단순 FAQ·요약 등에 적합. gpt-4.1-mini로 대체 검토 권장', speed: '빠름', ctx: '128K', inputPrice: 0.15, outputPrice: 0.60, intelligence: 6, recommend: 7 },
   // ── GPT-4 Turbo·GPT-4 (레거시) ──────────────────────────
-  'gpt-4-turbo':  { desc: '레거시. gpt-4o 출시 이후 동일 가격대에서 성능 역전됨. gpt-4o 또는 gpt-4.1 사용 권장. 신규 프로젝트 사용 비권장', speed: '중간', ctx: '128K', inputPrice: 5.00, outputPrice: 15.00, legacy: true },
-  'gpt-4':        { desc: '레거시. 8K 컨텍스트 제한에 출력 $60/1M으로 현존 최고가. 현재 기준 성능·비용 모두 최하위. 즉시 gpt-4o 또는 gpt-4.1로 교체 필요', speed: '느림', ctx: '8K', inputPrice: 30.00, outputPrice: 60.00, legacy: true },
-  'gpt-4-0613':   { desc: 'gpt-4 스냅샷 버전. gpt-4와 동일한 가격·성능 한계. 레거시 코드 호환 목적 외 사용 불필요', speed: '느림', ctx: '8K', inputPrice: 30.00, outputPrice: 60.00, legacy: true },
+  'gpt-4-turbo':  { desc: '레거시. gpt-4o 출시 이후 동일 가격대에서 성능 역전됨. gpt-4o 또는 gpt-4.1 사용 권장. 신규 프로젝트 사용 비권장', speed: '중간', ctx: '128K', inputPrice: 5.00, outputPrice: 15.00, intelligence: 7, recommend: 2, legacy: true },
+  'gpt-4':        { desc: '레거시. 8K 컨텍스트 제한에 출력 $60/1M으로 현존 최고가. 현재 기준 성능·비용 모두 최하위. 즉시 gpt-4o 또는 gpt-4.1로 교체 필요', speed: '느림', ctx: '8K', inputPrice: 30.00, outputPrice: 60.00, intelligence: 6, recommend: 1, legacy: true },
+  'gpt-4-0613':   { desc: 'gpt-4 스냅샷 버전. gpt-4와 동일한 가격·성능 한계. 레거시 코드 호환 목적 외 사용 불필요', speed: '느림', ctx: '8K', inputPrice: 30.00, outputPrice: 60.00, intelligence: 6, recommend: 1, legacy: true },
   // ── GPT-3.5 계열 (레거시) ────────────────────────────────
-  'gpt-3.5-turbo': { desc: '레거시. gpt-4o-mini 출시 후 사실상 대체됨. gpt-4o-mini가 더 저렴하거나 비슷한 가격에 훨씬 높은 성능. 신규 사용 비권장', speed: '매우 빠름', ctx: '16K', inputPrice: 0.50, outputPrice: 1.00, legacy: true },
+  'gpt-3.5-turbo': { desc: '레거시. gpt-4o-mini 출시 후 사실상 대체됨. gpt-4o-mini가 더 저렴하거나 비슷한 가격에 훨씬 높은 성능. 신규 사용 비권장', speed: '매우 빠름', ctx: '16K', inputPrice: 0.50, outputPrice: 1.00, intelligence: 3, recommend: 2, legacy: true },
   // ── o1 계열 (추론 모델, 레거시) ─────────────────────────
-  'o1':           { desc: '추론 모델 원조. 답변 전 내부에서 수십~수백 번 생각하는 방식. 그러나 o3 출시 후 성능·가격 모두 역전됨. 내부 추론 토큰으로 실비용은 표시의 3~10배. o3 사용 권장', speed: '느림', ctx: '128K', inputPrice: 15.00, outputPrice: 60.00, legacy: true },
-  'o1-mini':      { desc: 'o1 경량판. 그러나 o3-mini보다 비싸고 성능도 낮아 현재 존재 의미가 약함. o3-mini 또는 o4-mini 사용 권장', speed: '중간', ctx: '128K', inputPrice: 0.55, outputPrice: 2.20, legacy: true },
+  'o1':           { desc: '추론 모델 원조. 답변 전 내부에서 수십~수백 번 생각하는 방식. 그러나 o3 출시 후 성능·가격 모두 역전됨. 내부 추론 토큰으로 실비용은 표시의 3~10배. o3 사용 권장', speed: '느림', ctx: '128K', inputPrice: 15.00, outputPrice: 60.00, intelligence: 8, recommend: 2, legacy: true },
+  'o1-mini':      { desc: 'o1 경량판. 그러나 o3-mini보다 비싸고 성능도 낮아 현재 존재 의미가 약함. o3-mini 또는 o4-mini 사용 권장', speed: '중간', ctx: '128K', inputPrice: 0.55, outputPrice: 2.20, intelligence: 6, recommend: 2, legacy: true },
   // ── o3 계열 (추론 모델) ──────────────────────────────────
-  'o3-mini':      { desc: '경량 추론 모델. o1-mini 대비 성능 향상, 가격은 동급. 수학·알고리즘·코드 디버깅 등 명확한 정답이 있는 문제에 특화. 일반 대화에는 o4-mini가 나음', speed: '빠름', ctx: '200K', inputPrice: 1.10, outputPrice: 4.40 },
-  'o3':           { desc: '고성능 추론 모델. o1보다 성능 높고 가격은 75% 낮음. 수학·과학·복잡한 코드 분석에 최강. 단, 추론 토큰 추가 과금으로 실비용 주의. 일반 챗봇보다 전문 분석 도구에 적합', speed: '중간', ctx: '200K', inputPrice: 2.00, outputPrice: 8.00 },
+  'o3-mini':      { desc: '경량 추론 모델. o1-mini 대비 성능 향상, 가격은 동급. 수학·알고리즘·코드 디버깅 등 명확한 정답이 있는 문제에 특화. 일반 대화에는 o4-mini가 나음', speed: '빠름', ctx: '200K', inputPrice: 1.10, outputPrice: 4.40, intelligence: 8, recommend: 7 },
+  'o3':           { desc: '고성능 추론 모델. o1보다 성능 높고 가격은 75% 낮음. 수학·과학·복잡한 코드 분석에 최강. 단, 추론 토큰 추가 과금으로 실비용 주의. 일반 챗봇보다 전문 분석 도구에 적합', speed: '중간', ctx: '200K', inputPrice: 2.00, outputPrice: 8.00, intelligence: 10, recommend: 6 },
   // ── o4 계열 ──────────────────────────────────────────────
-  'o4-mini':      { desc: '2025년 4월 최신 추론 소형 모델. o3-mini와 같은 가격($1.10/$4.40)에 이미지 이해 추가, 성능은 o3-mini보다 높음. 추론 모델 중 현재 가성비 최고', speed: '빠름', ctx: '128K', inputPrice: 1.10, outputPrice: 4.40, badge: '최신' },
+  'o4-mini':      { desc: '2025년 4월 최신 추론 소형 모델. o3-mini와 같은 가격($1.10/$4.40)에 이미지 이해 추가, 성능은 o3-mini보다 높음. 추론 모델 중 현재 가성비 최고', speed: '빠름', ctx: '128K', inputPrice: 1.10, outputPrice: 4.40, intelligence: 9, recommend: 8, badge: '최신' },
 };
+
+type ModelSortKey = 'price' | 'speed' | 'intelligence' | 'recommend' | 'value';
 
 function getModelMeta(name: string): ModelMeta {
   if (MODEL_DB[name]) return MODEL_DB[name];
-  // 날짜 버전 모델: 길이 내림차순으로 정렬해 가장 구체적인 베이스 먼저 매칭
   const sortedKeys = Object.keys(MODEL_DB).sort((a, b) => b.length - a.length);
   for (const key of sortedKeys) {
     if (name.startsWith(key + '-') || name.startsWith(key + ':')) {
       return { ...MODEL_DB[key], badge: undefined };
     }
   }
-  // 완전 미지 모델: 계열명으로 최소 정보 제공
-  if (name.startsWith('o4')) return { desc: 'OpenAI o4 계열 추론 모델. 다단계 논리·수학·코드 심층 분석에 특화', speed: '중간', ctx: '미확인', inputPrice: 0, outputPrice: 0, badge: '최신' };
-  if (name.startsWith('o3')) return { desc: 'OpenAI o3 계열 추론 모델. 다단계 논리·수학·코드 심층 분석에 특화', speed: '중간', ctx: '미확인', inputPrice: 0, outputPrice: 0 };
-  if (name.startsWith('o1')) return { desc: 'OpenAI o1 계열 추론 모델 (레거시). o3/o4 계열로 교체 권장', speed: '느림', ctx: '미확인', inputPrice: 0, outputPrice: 0, legacy: true };
-  if (name.startsWith('gpt-4.1')) return { desc: 'GPT-4.1 계열 최신 모델. 긴 컨텍스트와 높은 지시 이행 능력', speed: '중간', ctx: '1M', inputPrice: 0, outputPrice: 0, badge: '최신' };
-  if (name.startsWith('gpt-4o')) return { desc: 'GPT-4o 계열 모델. 멀티모달 입력 지원, 균형 잡힌 성능', speed: '중간', ctx: '128K', inputPrice: 0, outputPrice: 0 };
-  if (name.startsWith('gpt-4')) return { desc: 'GPT-4 계열 레거시 모델. gpt-4o 또는 gpt-4.1로 교체 권장', speed: '중간', ctx: '미확인', inputPrice: 0, outputPrice: 0, legacy: true };
-  if (name.startsWith('gpt-3')) return { desc: 'GPT-3.5 계열 레거시 모델. gpt-4o-mini 또는 gpt-4.1-mini로 교체 권장', speed: '빠름', ctx: '미확인', inputPrice: 0, outputPrice: 0, legacy: true };
-  return { desc: 'OpenAI 신규 모델. 공식 가격·사양은 platform.openai.com/docs/pricing 참고', speed: '미확인', ctx: '미확인', inputPrice: 0, outputPrice: 0 };
+  if (name.startsWith('o4')) return { desc: 'OpenAI o4 계열 추론 모델', speed: '중간', ctx: '미확인', inputPrice: 0, outputPrice: 0, intelligence: 9, recommend: 7, badge: '최신' };
+  if (name.startsWith('o3')) return { desc: 'OpenAI o3 계열 추론 모델', speed: '중간', ctx: '미확인', inputPrice: 0, outputPrice: 0, intelligence: 8, recommend: 6 };
+  if (name.startsWith('o1')) return { desc: 'OpenAI o1 계열 추론 모델 (레거시)', speed: '느림', ctx: '미확인', inputPrice: 0, outputPrice: 0, intelligence: 7, recommend: 2, legacy: true };
+  if (name.startsWith('gpt-4.1')) return { desc: 'GPT-4.1 계열 최신 모델', speed: '중간', ctx: '1M', inputPrice: 0, outputPrice: 0, intelligence: 8, recommend: 9, badge: '최신' };
+  if (name.startsWith('gpt-4o')) return { desc: 'GPT-4o 계열 모델', speed: '중간', ctx: '128K', inputPrice: 0, outputPrice: 0, intelligence: 7, recommend: 7 };
+  if (name.startsWith('gpt-4')) return { desc: 'GPT-4 계열 레거시 모델', speed: '중간', ctx: '미확인', inputPrice: 0, outputPrice: 0, intelligence: 6, recommend: 2, legacy: true };
+  if (name.startsWith('gpt-3')) return { desc: 'GPT-3.5 계열 레거시 모델', speed: '빠름', ctx: '미확인', inputPrice: 0, outputPrice: 0, intelligence: 3, recommend: 1, legacy: true };
+  return { desc: 'OpenAI 신규 모델. platform.openai.com/docs/pricing 참고', speed: '미확인', ctx: '미확인', inputPrice: 0, outputPrice: 0, intelligence: 5, recommend: 5 };
+}
+
+function sortModels(models: string[], key: ModelSortKey, dir: 'asc' | 'desc'): string[] {
+  const scored = models.map((m) => {
+    const info = getModelMeta(m);
+    const total = info.inputPrice + info.outputPrice;
+    const value = total > 0 ? (info.intelligence / total) * 10 : info.intelligence;
+    const scores: Record<ModelSortKey, number> = {
+      price: total,
+      speed: SPEED_RANK[info.speed] ?? 5,
+      intelligence: info.intelligence,
+      recommend: info.recommend,
+      value,
+    };
+    return { m, score: scores[key] };
+  });
+  scored.sort((a, b) => dir === 'asc' ? a.score - b.score : b.score - a.score);
+  return scored.map((x) => x.m);
 }
 
 const EMPTY_FAQ: AdminFaq = {
@@ -171,6 +196,8 @@ export default function AdminPage() {
   const [modelSettings, setModelSettings] = useState<ModelSettings | null>(null);
   const [modelSaving, setModelSaving] = useState(false);
   const [modelLoadError, setModelLoadError] = useState('');
+  const [modelSortKey, setModelSortKey] = useState<ModelSortKey>('recommend');
+  const [modelSortDir, setModelSortDir] = useState<'asc' | 'desc'>('desc');
 
   // 권한 관리
   const [permissionsData, setPermissionsData] = useState<PermissionsData | null>(null);
@@ -1730,8 +1757,37 @@ export default function AdminPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <p className="text-xs font-medium text-slate-500">사용 가능한 모델</p>
-                      {allModels.map((m) => {
+                      {/* 정렬 버튼 */}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-xs text-slate-400">정렬</span>
+                        {([
+                          ['recommend', '추천순'],
+                          ['intelligence', '지능순'],
+                          ['value', '가성비순'],
+                          ['price', '가격순'],
+                          ['speed', '속도순'],
+                        ] as [ModelSortKey, string][]).map(([k, label]) => {
+                          const active = modelSortKey === k;
+                          const arrow = active ? (modelSortDir === 'desc' ? ' ↓' : ' ↑') : '';
+                          return (
+                            <button
+                              key={k}
+                              onClick={() => {
+                                if (modelSortKey === k) {
+                                  setModelSortDir((d) => d === 'desc' ? 'asc' : 'desc');
+                                } else {
+                                  setModelSortKey(k);
+                                  setModelSortDir(k === 'price' || k === 'speed' ? 'asc' : 'desc');
+                                }
+                              }}
+                              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${active ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                            >
+                              {label}{arrow}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {sortModels(allModels, modelSortKey, modelSortDir).map((m) => {
                         const info = getModelMeta(m);
                         const isCurrent = m === modelSettings.current_model;
                         const hasPrice = info.inputPrice > 0;
