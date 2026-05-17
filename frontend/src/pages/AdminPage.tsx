@@ -15,12 +15,24 @@ import {
   DbTableMeta,
   EncryptionSettings,
   ModelSettings,
+  PermissionsData,
   ProcessingLog,
   PromptConfig,
   PromptPayload,
 } from '../types';
 
 type TabKey = 'documents' | 'faqs' | 'prompts' | 'chats' | 'data' | 'db' | 'settings' | 'permissions';
+
+const MODEL_INFO: Record<string, { desc: string; speed: string; cost: string; badge?: string }> = {
+  'gpt-4o':           { desc: '최신 멀티모달 모델. 텍스트·이미지 이해, 복잡한 추론에 강점', speed: '중간', cost: '높음', badge: '추천' },
+  'gpt-4o-mini':      { desc: '경제적인 경량 모델. 일반 Q&A·요약에 충분한 성능', speed: '빠름', cost: '낮음' },
+  'gpt-4-turbo':      { desc: '강력한 추론·코드 생성, 128k 컨텍스트 지원', speed: '중간', cost: '높음' },
+  'gpt-4':            { desc: '고성능 범용 모델. 복잡한 지시 이행에 적합', speed: '느림', cost: '높음' },
+  'gpt-3.5-turbo':    { desc: '가볍고 빠른 모델. 단순 질답·분류에 최적', speed: '매우 빠름', cost: '매우 낮음' },
+  'o1':               { desc: '고급 추론 특화 모델. 수학·과학·코드 심층 분석', speed: '느림', cost: '매우 높음' },
+  'o1-mini':          { desc: 'o1 경량 버전. 추론 능력과 비용 사이 균형', speed: '중간', cost: '높음' },
+  'o3-mini':          { desc: '최신 추론 소형 모델. 빠른 속도·높은 정확도', speed: '빠름', cost: '중간' },
+};
 
 const EMPTY_FAQ: AdminFaq = {
   id: '',
@@ -118,7 +130,7 @@ export default function AdminPage() {
   const [modelLoadError, setModelLoadError] = useState('');
 
   // 권한 관리
-  const [permissions, setPermissions] = useState<string[]>([]);
+  const [permissionsData, setPermissionsData] = useState<PermissionsData | null>(null);
   const [permLoading, setPermLoading] = useState(false);
   const [newPermEmail, setNewPermEmail] = useState('');
   const [permSaving, setPermSaving] = useState(false);
@@ -270,7 +282,7 @@ export default function AdminPage() {
     setPermLoading(true);
     try {
       const result = await adminApi.getPermissions();
-      setPermissions(result.emails);
+      setPermissionsData(result);
     } catch {
       setNotice('권한 목록을 불러오지 못했습니다.');
     } finally {
@@ -1416,73 +1428,105 @@ export default function AdminPage() {
 
         {activeTab === 'permissions' && (
           <div className="mt-6 space-y-6">
+            {/* 최상위 관리자 */}
             <section className="rounded-3xl bg-white p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-900">권한 관리</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                관리자 페이지에 접근할 수 있는 Google 계정 이메일을 관리합니다.
-                <br />
-                <span className="text-xs text-slate-400">환경변수 <code className="font-mono">ADMIN_EMAIL</code>로 등록된 기본 관리자는 목록에 표시되지 않으며 삭제할 수 없습니다.</span>
-              </p>
+              <p className="mt-1 text-sm text-slate-500">관리자 페이지에 접근할 수 있는 Google 계정 이메일을 관리합니다.</p>
 
-              <div className="mt-5 flex gap-2">
-                <input
-                  value={newPermEmail}
-                  onChange={(e) => setNewPermEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
-                  placeholder="추가할 Google 이메일"
-                  className={INPUT_CLASS + ' max-w-sm'}
-                />
-                <button
-                  disabled={permSaving || !newPermEmail.trim()}
-                  onClick={async () => {
-                    setPermSaving(true);
-                    try {
-                      await adminApi.addPermission(newPermEmail.trim());
-                      setNewPermEmail('');
-                      setNotice('권한을 추가했습니다.');
-                      await loadPermissions();
-                    } catch {
-                      setNotice('권한 추가에 실패했습니다. 이미 등록된 이메일일 수 있습니다.');
-                    } finally {
-                      setPermSaving(false);
-                    }
-                  }}
-                  className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-                >
-                  {permSaving ? '추가 중...' : '추가'}
-                </button>
-              </div>
+              {permLoading && <p className="mt-4 text-sm text-slate-400">불러오는 중...</p>}
 
-              <div className="mt-4">
-                {permLoading ? (
-                  <p className="text-sm text-slate-400">불러오는 중...</p>
-                ) : permissions.length === 0 ? (
-                  <p className="text-sm text-slate-400">등록된 이메일이 없습니다. (기본 관리자 계정만 접근 가능)</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {permissions.map((email) => (
-                      <li key={email} className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-3">
-                        <span className="text-sm text-slate-700">{email}</span>
-                        <button
-                          onClick={async () => {
-                            if (!window.confirm(`${email}의 권한을 제거할까요?`)) return;
-                            try {
-                              await adminApi.removePermission(email);
-                              setNotice('권한을 제거했습니다.');
-                              await loadPermissions();
-                            } catch {
-                              setNotice('권한 제거에 실패했습니다.');
-                            }
-                          }}
-                          className="text-xs text-rose-500 hover:text-rose-700"
-                        >
-                          제거
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+              {permissionsData && (
+                <div className="mt-5 space-y-4">
+                  {/* 최상위 관리자 카드 */}
+                  <div className="rounded-2xl border-2 border-amber-200 bg-amber-50 p-4">
+                    <div className="flex items-center gap-3">
+                      <span className="flex-shrink-0 rounded-full bg-amber-400 px-2.5 py-0.5 text-xs font-semibold text-white">최상위 관리자</span>
+                      <span className="font-mono text-sm font-medium text-slate-800">{permissionsData.superadmin}</span>
+                      {permissionsData.superadmin === permissionsData.current_user && (
+                        <span className="rounded-full bg-cyan-100 px-2 py-0.5 text-xs font-medium text-cyan-700">나</span>
+                      )}
+                    </div>
+                    <p className="mt-2 text-xs text-amber-700">환경변수 <code className="font-mono">ADMIN_EMAIL</code>로 설정된 계정입니다. 삭제할 수 없으며 모든 권한을 보유합니다.</p>
+                  </div>
+
+                  {/* 관리자 목록 */}
+                  <div>
+                    <p className="mb-2 text-sm font-medium text-slate-700">관리자 <span className="ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{permissionsData.admins.length}명</span></p>
+                    {permissionsData.admins.length === 0 ? (
+                      <p className="rounded-xl border border-dashed border-slate-200 px-4 py-5 text-center text-sm text-slate-400">추가된 관리자가 없습니다.</p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {permissionsData.admins.map((admin) => {
+                          const isMe = admin.email === permissionsData.current_user;
+                          return (
+                            <li key={admin.email} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${isMe ? 'border-cyan-200 bg-cyan-50' : 'border-slate-100'}`}>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium text-slate-800">{admin.email}</span>
+                                  {isMe && <span className="rounded-full bg-cyan-200 px-2 py-0.5 text-xs font-medium text-cyan-800">나</span>}
+                                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">관리자</span>
+                                </div>
+                                <p className="mt-0.5 text-xs text-slate-400">
+                                  {admin.added_by ? `${admin.added_by}이 추가` : '시스템 추가'}
+                                  {admin.created_at && ` · ${new Date(admin.created_at).toLocaleDateString('ko-KR')}`}
+                                </p>
+                              </div>
+                              <button
+                                onClick={async () => {
+                                  if (!window.confirm(`${admin.email}의 권한을 제거할까요?`)) return;
+                                  try {
+                                    await adminApi.removePermission(admin.email);
+                                    setNotice('권한을 제거했습니다.');
+                                    await loadPermissions();
+                                  } catch {
+                                    setNotice('권한 제거에 실패했습니다.');
+                                  }
+                                }}
+                                className="ml-3 flex-shrink-0 text-xs text-rose-500 hover:text-rose-700"
+                              >
+                                제거
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+
+                  {/* 이메일 추가 */}
+                  <div className="border-t border-slate-100 pt-4">
+                    <p className="mb-2 text-sm font-medium text-slate-700">관리자 추가</p>
+                    <div className="flex gap-2">
+                      <input
+                        value={newPermEmail}
+                        onChange={(e) => setNewPermEmail(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                        placeholder="추가할 Google 이메일"
+                        className={INPUT_CLASS + ' max-w-sm'}
+                      />
+                      <button
+                        disabled={permSaving || !newPermEmail.trim()}
+                        onClick={async () => {
+                          setPermSaving(true);
+                          try {
+                            await adminApi.addPermission(newPermEmail.trim());
+                            setNewPermEmail('');
+                            setNotice('권한을 추가했습니다.');
+                            await loadPermissions();
+                          } catch {
+                            setNotice('권한 추가에 실패했습니다. 이미 등록된 이메일일 수 있습니다.');
+                          } finally {
+                            setPermSaving(false);
+                          }
+                        }}
+                        className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                      >
+                        {permSaving ? '추가 중...' : '추가'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </section>
           </div>
         )}
@@ -1566,8 +1610,13 @@ export default function AdminPage() {
             </section>
 
             <section className="rounded-3xl bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-900">LLM 모델 설정</h2>
-              <p className="mt-1 text-sm text-slate-500">OpenAI에서 사용 가능한 채팅 모델 목록을 불러옵니다. 변경 즉시 모든 답변에 적용됩니다.</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">LLM 모델 설정</h2>
+                  <p className="mt-1 text-sm text-slate-500">변경 즉시 모든 답변에 적용됩니다. 목록은 OpenAI API에서 실시간 조회합니다.</p>
+                </div>
+                <button onClick={() => { setModelSettings(null); void loadModelSettings(); }} className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm text-slate-600">새로고침</button>
+              </div>
 
               {modelLoadError && (
                 <div className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{modelLoadError}</div>
@@ -1577,62 +1626,78 @@ export default function AdminPage() {
                 <p className="mt-4 text-sm text-slate-400">불러오는 중...</p>
               )}
 
-              {modelSettings && (
-                <div className="mt-5 space-y-4">
-                  <div>
-                    <p className="mb-1 text-xs font-medium text-slate-500">현재 모델</p>
-                    <p className="font-mono text-sm font-semibold text-cyan-700">{modelSettings.current_model}</p>
-                  </div>
-
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-500">모델 변경</label>
-                    <div className="flex gap-2">
-                      <select
-                        className={INPUT_CLASS + ' max-w-sm'}
-                        defaultValue={modelSettings.current_model}
-                        id="model-select"
-                      >
-                        {modelSettings.available_models.map((m) => (
-                          <option key={m} value={m}>{m}</option>
-                        ))}
-                        {!modelSettings.available_models.includes(modelSettings.current_model) && (
-                          <option value={modelSettings.current_model}>{modelSettings.current_model} (현재)</option>
-                        )}
-                      </select>
-                      <button
-                        disabled={modelSaving}
-                        onClick={async () => {
-                          const select = document.getElementById('model-select') as HTMLSelectElement;
-                          const selected = select?.value;
-                          if (!selected) return;
-                          setModelSaving(true);
-                          try {
-                            const result = await adminApi.setModel(selected);
-                            setModelSettings({ ...modelSettings, current_model: result.model_name });
-                            setNotice(result.message);
-                          } catch {
-                            setNotice('모델 변경에 실패했습니다.');
-                          } finally {
-                            setModelSaving(false);
-                          }
-                        }}
-                        className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-                      >
-                        {modelSaving ? '저장 중...' : '적용'}
-                      </button>
-                      <button
-                        onClick={() => { setModelSettings(null); void loadModelSettings(); }}
-                        className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-600"
-                      >
-                        새로고침
-                      </button>
+              {modelSettings && (() => {
+                const allModels = modelSettings.available_models.includes(modelSettings.current_model)
+                  ? modelSettings.available_models
+                  : [...modelSettings.available_models, modelSettings.current_model];
+                return (
+                  <div className="mt-5 space-y-5">
+                    <div className="flex items-center gap-2 rounded-2xl bg-cyan-50 px-4 py-3">
+                      <span className="text-xs font-medium text-cyan-600">현재 적용 모델</span>
+                      <span className="font-mono text-sm font-semibold text-cyan-800">{modelSettings.current_model}</span>
                     </div>
-                    <p className="mt-2 text-xs text-slate-400">
-                      목록은 OpenAI API에서 실시간으로 조회합니다. 새 모델이 출시되면 자동으로 반영됩니다.
-                    </p>
+
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-slate-500">사용 가능한 모델</p>
+                      {allModels.map((m) => {
+                        const info = MODEL_INFO[m];
+                        const isCurrent = m === modelSettings.current_model;
+                        return (
+                          <label
+                            key={m}
+                            className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-colors ${isCurrent ? 'border-cyan-300 bg-cyan-50' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}
+                          >
+                            <input type="radio" name="model-select" value={m} defaultChecked={isCurrent} className="mt-0.5 accent-cyan-600" />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-mono text-sm font-semibold text-slate-800">{m}</span>
+                                {info?.badge && (
+                                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">{info.badge}</span>
+                                )}
+                                {isCurrent && (
+                                  <span className="rounded-full bg-cyan-200 px-2 py-0.5 text-xs font-medium text-cyan-800">현재</span>
+                                )}
+                              </div>
+                              {info ? (
+                                <p className="mt-1 text-xs text-slate-500">{info.desc}</p>
+                              ) : (
+                                <p className="mt-1 text-xs text-slate-400">모델 정보 없음</p>
+                              )}
+                              {info && (
+                                <div className="mt-1.5 flex gap-3 text-xs text-slate-400">
+                                  <span>속도 <span className="font-medium text-slate-600">{info.speed}</span></span>
+                                  <span>비용 <span className="font-medium text-slate-600">{info.cost}</span></span>
+                                </div>
+                              )}
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+
+                    <button
+                      disabled={modelSaving}
+                      onClick={async () => {
+                        const checked = document.querySelector<HTMLInputElement>('input[name="model-select"]:checked');
+                        if (!checked?.value) return;
+                        setModelSaving(true);
+                        try {
+                          const result = await adminApi.setModel(checked.value);
+                          setModelSettings({ ...modelSettings, current_model: result.model_name });
+                          setNotice(result.message);
+                        } catch {
+                          setNotice('모델 변경에 실패했습니다.');
+                        } finally {
+                          setModelSaving(false);
+                        }
+                      }}
+                      className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+                    >
+                      {modelSaving ? '저장 중...' : '선택한 모델로 적용'}
+                    </button>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </section>
           </div>
         )}

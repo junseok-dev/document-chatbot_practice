@@ -976,9 +976,20 @@ class AddPermissionRequest(BaseModel):
 
 
 @router.get("/permissions")
-def list_permissions(db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+def list_permissions(db: Session = Depends(get_db), current_user: str = Depends(verify_admin)):
     users = db.query(AdminUser).order_by(AdminUser.created_at).all()
-    return {"emails": [u.email for u in users]}
+    return {
+        "superadmin": get_settings().admin_email,
+        "current_user": current_user,
+        "admins": [
+            {
+                "email": u.email,
+                "added_by": u.added_by,
+                "created_at": u.created_at.isoformat() if u.created_at else None,
+            }
+            for u in users
+        ],
+    }
 
 
 @router.post("/permissions", status_code=201)

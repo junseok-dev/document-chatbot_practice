@@ -16,6 +16,18 @@ export interface EncryptionSettings {
   categories: EncryptionCategory[];
 }
 
+export interface AdminInfo {
+  email: string;
+  added_by: string | null;
+  created_at: string | null;
+}
+
+export interface PermissionsData {
+  superadmin: string;
+  current_user: string;
+  admins: AdminInfo[];
+}
+
 export interface Conversation {
   id: string;
   title: string;

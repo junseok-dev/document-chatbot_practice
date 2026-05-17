@@ -16,6 +16,7 @@ import {
   DbTableMeta,
   EncryptionSettings,
   ModelSettings,
+  PermissionsData,
   ProcessingLog,
   PromptConfig,
   PromptPayload,
@@ -370,8 +371,8 @@ export const adminApi = {
     return response.data;
   },
 
-  getPermissions: async (): Promise<{ emails: string[] }> => {
-    const response = await adminApiClient.get('/admin/permissions');
+  getPermissions: async (): Promise<PermissionsData> => {
+    const response = await adminApiClient.get<PermissionsData>('/admin/permissions');
     return response.data;
   },
 
