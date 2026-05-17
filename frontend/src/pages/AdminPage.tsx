@@ -23,16 +23,66 @@ import {
 
 type TabKey = 'documents' | 'faqs' | 'prompts' | 'chats' | 'data' | 'db' | 'settings' | 'permissions';
 
-const MODEL_INFO: Record<string, { desc: string; speed: string; cost: string; badge?: string }> = {
-  'gpt-4o':           { desc: '최신 멀티모달 모델. 텍스트·이미지 이해, 복잡한 추론에 강점', speed: '중간', cost: '높음', badge: '추천' },
-  'gpt-4o-mini':      { desc: '경제적인 경량 모델. 일반 Q&A·요약에 충분한 성능', speed: '빠름', cost: '낮음' },
-  'gpt-4-turbo':      { desc: '강력한 추론·코드 생성, 128k 컨텍스트 지원', speed: '중간', cost: '높음' },
-  'gpt-4':            { desc: '고성능 범용 모델. 복잡한 지시 이행에 적합', speed: '느림', cost: '높음' },
-  'gpt-3.5-turbo':    { desc: '가볍고 빠른 모델. 단순 질답·분류에 최적', speed: '매우 빠름', cost: '매우 낮음' },
-  'o1':               { desc: '고급 추론 특화 모델. 수학·과학·코드 심층 분석', speed: '느림', cost: '매우 높음' },
-  'o1-mini':          { desc: 'o1 경량 버전. 추론 능력과 비용 사이 균형', speed: '중간', cost: '높음' },
-  'o3-mini':          { desc: '최신 추론 소형 모델. 빠른 속도·높은 정확도', speed: '빠름', cost: '중간' },
+interface ModelMeta {
+  desc: string;
+  speed: string;
+  ctx: string;
+  inputPrice: number;
+  outputPrice: number;
+  badge?: string;
+  legacy?: boolean;
+}
+
+const MODEL_DB: Record<string, ModelMeta> = {
+  // ── GPT-4o 계열 ──────────────────────────────────────────
+  'gpt-4o':                  { desc: '최신 멀티모달 모델. 텍스트·이미지 이해, 복잡한 추론·코드 생성에 강점', speed: '중간', ctx: '128K', inputPrice: 2.50, outputPrice: 10.00, badge: '추천' },
+  'gpt-4o-2024-11-20':       { desc: '최신 멀티모달 모델. 텍스트·이미지 이해, 복잡한 추론·코드 생성에 강점', speed: '중간', ctx: '128K', inputPrice: 2.50, outputPrice: 10.00 },
+  'gpt-4o-2024-08-06':       { desc: '최신 멀티모달 모델. 텍스트·이미지 이해, 복잡한 추론·코드 생성에 강점', speed: '중간', ctx: '128K', inputPrice: 2.50, outputPrice: 10.00 },
+  'gpt-4o-2024-05-13':       { desc: '최신 멀티모달 모델. 이미지·텍스트 혼합 입력 지원', speed: '중간', ctx: '128K', inputPrice: 2.50, outputPrice: 10.00 },
+  // ── GPT-4o mini 계열 ─────────────────────────────────────
+  'gpt-4o-mini':             { desc: '경제적 경량 모델. 일반 Q&A·요약·분류에 충분한 성능, gpt-4o 대비 94% 저렴', speed: '빠름', ctx: '128K', inputPrice: 0.15, outputPrice: 0.60 },
+  'gpt-4o-mini-2024-07-18':  { desc: '경제적 경량 모델. 일반 Q&A·요약·분류에 충분한 성능, gpt-4o 대비 94% 저렴', speed: '빠름', ctx: '128K', inputPrice: 0.15, outputPrice: 0.60 },
+  // ── GPT-4 Turbo 계열 (레거시) ────────────────────────────
+  'gpt-4-turbo':             { desc: '강력한 추론·코드 생성. 128K 컨텍스트 지원. gpt-4o 출시 후 레거시 전환', speed: '중간', ctx: '128K', inputPrice: 10.00, outputPrice: 30.00, legacy: true },
+  'gpt-4-turbo-2024-04-09':  { desc: '강력한 추론·코드 생성. 128K 컨텍스트 지원', speed: '중간', ctx: '128K', inputPrice: 10.00, outputPrice: 30.00, legacy: true },
+  'gpt-4-turbo-preview':     { desc: 'GPT-4 Turbo 프리뷰. 최신 지식 컷오프 포함', speed: '중간', ctx: '128K', inputPrice: 10.00, outputPrice: 30.00, legacy: true },
+  // ── GPT-4 계열 (레거시) ──────────────────────────────────
+  'gpt-4':                   { desc: '고성능 범용 모델. 복잡한 지시 이행에 적합. gpt-4o·gpt-4-turbo로 대체 권장', speed: '느림', ctx: '8K', inputPrice: 30.00, outputPrice: 60.00, legacy: true },
+  'gpt-4-0613':              { desc: 'GPT-4 2023-06-13 스냅샷. 안정적 응답이 필요한 구현에 사용', speed: '느림', ctx: '8K', inputPrice: 30.00, outputPrice: 60.00, legacy: true },
+  'gpt-4-32k':               { desc: 'GPT-4 확장 컨텍스트 버전. 긴 문서 처리용, 현재 레거시', speed: '느림', ctx: '32K', inputPrice: 60.00, outputPrice: 120.00, legacy: true },
+  // ── GPT-3.5 계열 (레거시) ────────────────────────────────
+  'gpt-3.5-turbo':           { desc: '가볍고 빠른 모델. 단순 질답·분류·번역. gpt-4o-mini로 대체 권장', speed: '매우 빠름', ctx: '16K', inputPrice: 0.50, outputPrice: 1.50, legacy: true },
+  'gpt-3.5-turbo-0125':      { desc: 'GPT-3.5 Turbo 최신 스냅샷. 낮은 비용으로 빠른 응답', speed: '매우 빠름', ctx: '16K', inputPrice: 0.50, outputPrice: 1.50, legacy: true },
+  'gpt-3.5-turbo-instruct':  { desc: '지시 이행 특화 GPT-3.5. Completions API 전용', speed: '매우 빠름', ctx: '4K', inputPrice: 1.50, outputPrice: 2.00, legacy: true },
+  // ── o1 계열 (추론 모델) ──────────────────────────────────
+  'o1':                      { desc: '고급 추론 특화 모델. 수학·과학·코드 심층 분석. 내부 추론 토큰 포함으로 실비용 3~10배 가산', speed: '느림', ctx: '128K', inputPrice: 15.00, outputPrice: 60.00 },
+  'o1-2024-12-17':           { desc: '고급 추론 특화 모델. 수학·과학·코드 심층 분석. 내부 추론 토큰 포함으로 실비용 3~10배 가산', speed: '느림', ctx: '128K', inputPrice: 15.00, outputPrice: 60.00 },
+  'o1-mini':                 { desc: 'o1 경량 버전. 추론 능력과 비용 균형, STEM 문제 해결에 적합', speed: '중간', ctx: '128K', inputPrice: 3.00, outputPrice: 12.00 },
+  'o1-mini-2024-09-12':      { desc: 'o1 경량 버전. 추론 능력과 비용 균형, STEM 문제 해결에 적합', speed: '중간', ctx: '128K', inputPrice: 3.00, outputPrice: 12.00 },
+  'o1-preview':              { desc: 'o1 초기 프리뷰. 복잡한 추론 작업 전용, 현재 o1 정식으로 대체', speed: '느림', ctx: '128K', inputPrice: 15.00, outputPrice: 60.00, legacy: true },
+  // ── o3 계열 (추론 모델) ──────────────────────────────────
+  'o3-mini':                 { desc: '차세대 추론 소형 모델. 빠른 속도와 높은 정확도, o1-mini 대비 성능 향상. 추론 토큰 별도 과금', speed: '빠름', ctx: '200K', inputPrice: 1.10, outputPrice: 4.40 },
+  'o3-mini-2025-01-31':      { desc: '차세대 추론 소형 모델. 빠른 속도와 높은 정확도, o1-mini 대비 성능 향상. 추론 토큰 별도 과금', speed: '빠름', ctx: '200K', inputPrice: 1.10, outputPrice: 4.40 },
+  'o3':                      { desc: '최신 고급 추론 모델. o1보다 높은 성능, 수학·코딩·과학 분야 최고 수준', speed: '중간', ctx: '200K', inputPrice: 2.00, outputPrice: 8.00 },
+  // ── o4 계열 ──────────────────────────────────────────────
+  'o4-mini':                 { desc: '최신 경량 추론 모델. o3-mini 대비 비용 절반, 속도·성능 균형 우수', speed: '빠름', ctx: '128K', inputPrice: 0.55, outputPrice: 2.20, badge: '신규' },
 };
+
+function getModelMeta(name: string): ModelMeta | undefined {
+  if (MODEL_DB[name]) return MODEL_DB[name];
+  // 날짜 버전이 붙은 모델 처리: 길이 순 정렬로 가장 구체적인 접두사 우선 매칭
+  const sortedKeys = Object.keys(MODEL_DB).sort((a, b) => b.length - a.length);
+  for (const key of sortedKeys) {
+    if (name.startsWith(key + '-') || name.startsWith(key + ':')) {
+      return { ...MODEL_DB[key], badge: undefined };
+    }
+  }
+  // 완전 미지 모델: 이름에서 계열 추정
+  if (name.startsWith('o')) return { desc: 'OpenAI 추론(reasoning) 계열 모델. 복잡한 다단계 문제 해결에 특화', speed: '중간', ctx: '미확인', inputPrice: 0, outputPrice: 0 };
+  if (name.startsWith('gpt-4')) return { desc: 'GPT-4 계열 고성능 모델', speed: '중간', ctx: '미확인', inputPrice: 0, outputPrice: 0 };
+  if (name.startsWith('gpt-3')) return { desc: 'GPT-3.5 계열 경량 모델', speed: '빠름', ctx: '미확인', inputPrice: 0, outputPrice: 0 };
+  return { desc: 'OpenAI 신규 모델. 공식 페이지에서 상세 정보를 확인하세요.', speed: '미확인', ctx: '미확인', inputPrice: 0, outputPrice: 0 };
+}
 
 const EMPTY_FAQ: AdminFaq = {
   id: '',
@@ -1640,8 +1690,9 @@ export default function AdminPage() {
                     <div className="space-y-2">
                       <p className="text-xs font-medium text-slate-500">사용 가능한 모델</p>
                       {allModels.map((m) => {
-                        const info = MODEL_INFO[m];
+                        const info = getModelMeta(m);
                         const isCurrent = m === modelSettings.current_model;
+                        const hasPrice = info && info.inputPrice > 0;
                         return (
                           <label
                             key={m}
@@ -1652,23 +1703,28 @@ export default function AdminPage() {
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="font-mono text-sm font-semibold text-slate-800">{m}</span>
                                 {info?.badge && (
-                                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">{info.badge}</span>
+                                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${info.badge === '신규' ? 'bg-violet-100 text-violet-700' : 'bg-emerald-100 text-emerald-700'}`}>{info.badge}</span>
+                                )}
+                                {info?.legacy && (
+                                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">레거시</span>
                                 )}
                                 {isCurrent && (
                                   <span className="rounded-full bg-cyan-200 px-2 py-0.5 text-xs font-medium text-cyan-800">현재</span>
                                 )}
                               </div>
-                              {info ? (
-                                <p className="mt-1 text-xs text-slate-500">{info.desc}</p>
-                              ) : (
-                                <p className="mt-1 text-xs text-slate-400">모델 정보 없음</p>
-                              )}
-                              {info && (
-                                <div className="mt-1.5 flex gap-3 text-xs text-slate-400">
-                                  <span>속도 <span className="font-medium text-slate-600">{info.speed}</span></span>
-                                  <span>비용 <span className="font-medium text-slate-600">{info.cost}</span></span>
-                                </div>
-                              )}
+                              <p className="mt-1 text-xs text-slate-500">{info?.desc}</p>
+                              <div className="mt-1.5 flex flex-wrap gap-3 text-xs text-slate-400">
+                                {info?.ctx && <span>컨텍스트 <span className="font-medium text-slate-600">{info.ctx}</span></span>}
+                                <span>속도 <span className="font-medium text-slate-600">{info?.speed ?? '미확인'}</span></span>
+                                {hasPrice ? (
+                                  <>
+                                    <span>입력 <span className="font-medium text-slate-700">${info.inputPrice.toFixed(2)}</span><span className="text-slate-400">/1M tok</span></span>
+                                    <span>출력 <span className="font-medium text-slate-700">${info.outputPrice.toFixed(2)}</span><span className="text-slate-400">/1M tok</span></span>
+                                  </>
+                                ) : (
+                                  <span className="text-slate-400">가격 미확인 — OpenAI 공식 페이지 참고</span>
+                                )}
+                              </div>
                             </div>
                           </label>
                         );
