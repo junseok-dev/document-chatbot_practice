@@ -1746,9 +1746,10 @@ export default function AdminPage() {
               )}
 
               {modelSettings && (() => {
-                const allModels = modelSettings.available_models.includes(modelSettings.current_model)
-                  ? modelSettings.available_models
-                  : [...modelSettings.available_models, modelSettings.current_model];
+                const allModels = [
+                  ...modelSettings.available_models,
+                  ...(modelSettings.available_models.includes(modelSettings.current_model) ? [] : [modelSettings.current_model]),
+                ].filter((m) => !getModelMeta(m).legacy || m === modelSettings.current_model);
                 return (
                   <div className="mt-5 space-y-5">
                     <div className="flex items-center gap-2 rounded-2xl bg-cyan-50 px-4 py-3">
