@@ -41,8 +41,11 @@ const SPEED_RANK: Record<string, number> = {
 };
 
 const MODEL_DB: Record<string, ModelMeta> = {
+  // ── GPT-5 계열 (2025.08 출시, 현재 최신) ────────────────
+  'gpt-5':        { desc: '최신 GPT 플래그십. gpt-4.1 대비 추론·지시 이행 전 분야 향상. 복잡한 다단계 작업·코딩·분석에 최고 수준. 비용이 gpt-5-mini의 ~5배로 중요 응답에 선택 사용 권장', speed: '중간', ctx: '미확인', inputPrice: 2.50, outputPrice: 15.00, intelligence: 10, recommend: 9, badge: '최신' },
+  'gpt-5-mini':   { desc: '빠르고 경제적인 GPT-5 경량판. gpt-4.1급 지능에 가격은 절반 이하($0.25/$2). 400K 컨텍스트로 긴 문서 처리 가능. 일상적인 챗봇 응답에 현재 최고 가성비', speed: '빠름', ctx: '400K', inputPrice: 0.25, outputPrice: 2.00, intelligence: 9, recommend: 10, badge: '최신' },
   // ── GPT-4.1 계열 (2025.04 출시, 현재 최신) ───────────────
-  'gpt-4.1':      { desc: '2025년 4월 출시 최신 플래그십. gpt-4o보다 코딩·지시 이행 성능 높고 가격은 20% 저렴. 컨텍스트 1M 토큰으로 긴 문서에 유리. 챗봇 운영 최우선 권장', speed: '중간', ctx: '1M', inputPrice: 2.00, outputPrice: 8.00, intelligence: 9, recommend: 10, badge: '최신' },
+  'gpt-4.1':      { desc: '2025년 4월 출시. gpt-4o보다 코딩·지시 이행 성능 높고 가격은 20% 저렴. 1M 토큰 컨텍스트로 긴 문서에 유리. gpt-5 계열 미지원 환경의 대안', speed: '중간', ctx: '1M', inputPrice: 2.00, outputPrice: 8.00, intelligence: 9, recommend: 8, badge: '추천' },
   'gpt-4.1-mini': { desc: '4.1의 경량판. gpt-4o-mini보다 성능 개선, 가격은 비슷. FAQ 답변·요약·분류 등 일상적 챗봇 응답에 최적. 비용과 품질의 균형이 가장 좋음', speed: '빠름', ctx: '1M', inputPrice: 0.20, outputPrice: 0.80, intelligence: 7, recommend: 10, badge: '추천' },
   'gpt-4.1-nano': { desc: '초경량 초저가 모델. 단순 키워드 매핑·짧은 라벨링·빠른 분류에 한정 사용. 복잡한 질문에는 엉뚱한 답변 가능성 높아 챗봇 메인 모델로 부적합', speed: '매우 빠름', ctx: '1M', inputPrice: 0.05, outputPrice: 0.20, intelligence: 4, recommend: 4 },
   // ── GPT-4o 계열 ──────────────────────────────────────────
@@ -74,10 +77,11 @@ function getModelMeta(name: string): ModelMeta {
       return { ...MODEL_DB[key], badge: undefined };
     }
   }
+  if (name.startsWith('gpt-5')) return { desc: 'GPT-5 계열 최신 모델. 현재 최고 수준의 지시 이행·추론 능력', speed: '중간', ctx: '미확인', inputPrice: 0, outputPrice: 0, intelligence: 10, recommend: 9, badge: '최신' };
   if (name.startsWith('o4')) return { desc: 'OpenAI o4 계열 추론 모델', speed: '중간', ctx: '미확인', inputPrice: 0, outputPrice: 0, intelligence: 9, recommend: 7, badge: '최신' };
   if (name.startsWith('o3')) return { desc: 'OpenAI o3 계열 추론 모델', speed: '중간', ctx: '미확인', inputPrice: 0, outputPrice: 0, intelligence: 8, recommend: 6 };
   if (name.startsWith('o1')) return { desc: 'OpenAI o1 계열 추론 모델 (레거시)', speed: '느림', ctx: '미확인', inputPrice: 0, outputPrice: 0, intelligence: 7, recommend: 2, legacy: true };
-  if (name.startsWith('gpt-4.1')) return { desc: 'GPT-4.1 계열 최신 모델', speed: '중간', ctx: '1M', inputPrice: 0, outputPrice: 0, intelligence: 8, recommend: 9, badge: '최신' };
+  if (name.startsWith('gpt-4.1')) return { desc: 'GPT-4.1 계열 모델', speed: '중간', ctx: '1M', inputPrice: 0, outputPrice: 0, intelligence: 8, recommend: 8, badge: '추천' };
   if (name.startsWith('gpt-4o')) return { desc: 'GPT-4o 계열 모델', speed: '중간', ctx: '128K', inputPrice: 0, outputPrice: 0, intelligence: 7, recommend: 7 };
   if (name.startsWith('gpt-4')) return { desc: 'GPT-4 계열 레거시 모델', speed: '중간', ctx: '미확인', inputPrice: 0, outputPrice: 0, intelligence: 6, recommend: 2, legacy: true };
   if (name.startsWith('gpt-3')) return { desc: 'GPT-3.5 계열 레거시 모델', speed: '빠름', ctx: '미확인', inputPrice: 0, outputPrice: 0, intelligence: 3, recommend: 1, legacy: true };
