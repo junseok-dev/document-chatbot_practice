@@ -921,7 +921,8 @@ def browse_db_table(
 def _is_chat_model(model_id: str) -> bool:
     if ":" in model_id:
         return False
-    if "instruct" in model_id:
+    EXCLUDED = ("instruct", "realtime", "audio", "tts", "whisper", "dall", "embedding", "moderation", "vision")
+    if any(kw in model_id for kw in EXCLUDED):
         return False
     prefixes = ("gpt-4", "gpt-3.5-turbo", "o1", "o3", "o4", "chatgpt")
     return any(model_id.startswith(p) for p in prefixes)
