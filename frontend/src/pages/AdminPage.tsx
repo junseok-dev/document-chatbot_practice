@@ -184,6 +184,8 @@ export default function AdminPage() {
   const [permLoading, setPermLoading] = useState(false);
   const [newPermEmail, setNewPermEmail] = useState('');
   const [permSaving, setPermSaving] = useState(false);
+  const [newSuperadminEmail, setNewSuperadminEmail] = useState('');
+  const [superadminSaving, setSuperadminSaving] = useState(false);
 
   // 암호화 설정
   const [encryptionSettings, setEncryptionSettings] = useState<EncryptionSettings | null>(null);
@@ -1488,16 +1490,63 @@ export default function AdminPage() {
               {permissionsData && (
                 <div className="mt-5 space-y-4">
                   {/* 최상위 관리자 카드 */}
-                  <div className="rounded-2xl border-2 border-amber-200 bg-amber-50 p-4">
-                    <div className="flex items-center gap-3">
-                      <span className="flex-shrink-0 rounded-full bg-amber-400 px-2.5 py-0.5 text-xs font-semibold text-white">최상위 관리자</span>
-                      <span className="font-mono text-sm font-medium text-slate-800">{permissionsData.superadmin}</span>
-                      {permissionsData.superadmin === permissionsData.current_user && (
-                        <span className="rounded-full bg-cyan-100 px-2 py-0.5 text-xs font-medium text-cyan-700">나</span>
-                      )}
-                    </div>
-                    <p className="mt-2 text-xs text-amber-700">환경변수 <code className="font-mono">ADMIN_EMAIL</code>로 설정된 계정입니다. 삭제할 수 없으며 모든 권한을 보유합니다.</p>
-                  </div>
+                  {(() => {
+                    const isSuperadmin = permissionsData.superadmin === permissionsData.current_user;
+                    return (
+                      <div className="rounded-2xl border-2 border-amber-200 bg-amber-50 p-4">
+                        <div className="flex items-center gap-3">
+                          <span className="flex-shrink-0 rounded-full bg-amber-400 px-2.5 py-0.5 text-xs font-semibold text-white">최상위 관리자</span>
+                          <span className="font-mono text-sm font-medium text-slate-800">{permissionsData.superadmin}</span>
+                          {isSuperadmin && (
+                            <span className="rounded-full bg-cyan-100 px-2 py-0.5 text-xs font-medium text-cyan-700">나</span>
+                          )}
+                        </div>
+                        <p className="mt-2 text-xs text-amber-700">환경변수 <code className="font-mono">ADMIN_EMAIL</code>로 설정된 계정입니다. 삭제할 수 없으며 모든 권한을 보유합니다.</p>
+
+                        {/* 최상위 관리자 변경 — 본인일 때만 표시 */}
+                        {isSuperadmin && (
+                          <div className="mt-4 border-t border-amber-200 pt-4">
+                            <p className="mb-2 text-xs font-semibold text-amber-800">최상위 관리자 이메일 변경</p>
+                            <p className="mb-3 text-xs text-amber-700">변경 즉시 현재 계정은 최상위 관리자 권한을 잃습니다. 새 이메일로 로그인해야 합니다.</p>
+                            <div className="flex gap-2">
+                              <input
+                                value={newSuperadminEmail}
+                                onChange={(e) => setNewSuperadminEmail(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                                placeholder="새 최상위 관리자 Google 이메일"
+                                className={INPUT_CLASS + ' max-w-sm bg-white'}
+                              />
+                              <button
+                                disabled={superadminSaving || !newSuperadminEmail.trim()}
+                                onClick={async () => {
+                                  if (!window.confirm(`최상위 관리자를 "${newSuperadminEmail}"로 변경하시겠습니까?\n변경 후 현재 계정은 자동 로그아웃됩니다.`)) return;
+                                  setSuperadminSaving(true);
+                                  try {
+                                    const result = await adminApi.setSuperadmin(newSuperadminEmail.trim());
+                                    setNotice(result.message);
+                                    setNewSuperadminEmail('');
+                                    // 슈퍼어드민이 바뀌었으므로 로그아웃
+                                    setTimeout(() => {
+                                      clearAdminToken();
+                                      setAuthenticated(false);
+                                    }, 2000);
+                                  } catch (err: unknown) {
+                                    const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+                                    setNotice(msg ?? '최상위 관리자 변경에 실패했습니다.');
+                                  } finally {
+                                    setSuperadminSaving(false);
+                                  }
+                                }}
+                                className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                              >
+                                {superadminSaving ? '변경 중...' : '변경'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* 관리자 목록 */}
                   <div>

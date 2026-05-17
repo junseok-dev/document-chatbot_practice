@@ -971,6 +971,32 @@ def change_password(body: PasswordChangeRequest, db: Session = Depends(get_db), 
 # ── 권한 관리 ──────────────────────────────────────────────────
 
 
+class ChangeSuperadminRequest(BaseModel):
+    new_email: str
+
+
+@router.put("/settings/superadmin")
+def change_superadmin(
+    body: ChangeSuperadminRequest,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(verify_admin),
+):
+    if current_user != get_settings().admin_email:
+        raise HTTPException(status_code=403, detail="최상위 관리자만 이 작업을 수행할 수 있습니다.")
+    new_email = body.new_email.strip().lower()
+    if not new_email or "@" not in new_email:
+        raise HTTPException(status_code=400, detail="유효한 이메일을 입력해주세요.")
+    if new_email == get_settings().admin_email:
+        raise HTTPException(status_code=400, detail="현재 최상위 관리자 이메일과 동일합니다.")
+    lines = ENV_PATH.read_text(encoding="utf-8").splitlines() if ENV_PATH.exists() else []
+    updated = [line for line in lines if not line.startswith("ADMIN_EMAIL=")]
+    updated.append(f"ADMIN_EMAIL={new_email}")
+    ENV_PATH.write_text("\n".join(updated) + "\n", encoding="utf-8")
+    get_settings.cache_clear()
+    create_audit_log(db, "superadmin_changed", "system", "admin_email", current_user)
+    return {"message": f"최상위 관리자를 {new_email}로 변경했습니다. 다시 로그인해주세요."}
+
+
 class AddPermissionRequest(BaseModel):
     email: str
 

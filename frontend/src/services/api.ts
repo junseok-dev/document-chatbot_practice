@@ -376,6 +376,11 @@ export const adminApi = {
     return response.data;
   },
 
+  setSuperadmin: async (new_email: string): Promise<{ message: string }> => {
+    const response = await adminApiClient.put('/admin/settings/superadmin', { new_email });
+    return response.data;
+  },
+
   addPermission: async (email: string): Promise<{ message: string }> => {
     const response = await adminApiClient.post('/admin/permissions', { email });
     return response.data;
