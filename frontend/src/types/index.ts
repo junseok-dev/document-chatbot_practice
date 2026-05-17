@@ -1,3 +1,21 @@
+export interface ModelSettings {
+  current_model: string;
+  available_models: string[];
+}
+
+export interface EncryptionCategory {
+  key: string;
+  label: string;
+  encrypt_enabled: boolean;
+  encrypted_count: number;
+  plain_count: number;
+  total: number;
+}
+
+export interface EncryptionSettings {
+  categories: EncryptionCategory[];
+}
+
 export interface Conversation {
   id: string;
   title: string;

@@ -1,10 +1,13 @@
+import csv
 import io
 import json
 from datetime import date, datetime, time
 from pathlib import Path
 
+import jwt
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.responses import Response
+from openai import AsyncOpenAI
 from openpyxl import Workbook
 from pydantic import BaseModel
 from sqlalchemy import inspect as sa_inspect, text
@@ -13,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db.crud import get_all_sessions, get_session_messages
 from app.db.database import get_db
-from app.db.models import AdminAuditLog, ChatLog, ChatSession, CustomColumn, CustomTable, DocumentRecord, FaqRecord, ProcessingLog, PromptConfig
+from app.db.models import AdminAuditLog, AdminUser, ChatLog, ChatSession, CustomColumn, CustomTable, DocumentRecord, FaqRecord, ProcessingLog, PromptConfig
 from app.models.session import MessageDetail, SessionDetail, SessionSummary
 from app.services.admin_service import (
     approve_document,
@@ -30,7 +33,7 @@ from app.services.admin_service import (
 from app.services.faq_service import _serialize_faq, seed_faqs, sync_faqs_to_file
 from app.services.prompt_service import PROMPT_DEFAULTS, seed_prompt_configs, serialize_prompt
 from app.services.storage_service import read_text_from_storage, storage_exists
-from app.utils.crypto import decrypt_if_needed, encrypt, maybe_encrypt
+from app.utils.crypto import ENCRYPTED_PREFIX, decrypt_if_needed, encrypt, maybe_encrypt
 
 router = APIRouter()
 
@@ -54,13 +57,25 @@ TABLE_DESCRIPTIONS: dict[str, str] = {
 }
 
 
-def verify_admin(x_admin_password: str = Header(...)):
-    if x_admin_password != get_settings().admin_password:
-        raise HTTPException(status_code=401, detail="관리자 인증에 실패했습니다.")
+def verify_admin(authorization: str = Header(None)) -> str:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="인증이 필요합니다.")
+    token = authorization[7:]
+    try:
+        payload = jwt.decode(token, get_settings().jwt_secret, algorithms=["HS256"])
+        return payload["sub"]
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="세션이 만료되었습니다. 다시 로그인해주세요.")
+    except Exception:
+        raise HTTPException(status_code=401, detail="인증에 실패했습니다.")
 
 
 class PasswordChangeRequest(BaseModel):
     new_password: str
+
+
+class ModelChangeRequest(BaseModel):
+    model_name: str
 
 
 class ReviewRequest(BaseModel):
@@ -154,16 +169,29 @@ def _serialize_audit_log(row: AdminAuditLog) -> dict:
     }
 
 
+def _crypt_value(value: str | None, should_encrypt: bool) -> str | None:
+    if value is None:
+        return None
+    if not value:
+        return value
+    if should_encrypt:
+        return maybe_encrypt(value)
+    if value.startswith(ENCRYPTED_PREFIX):
+        return decrypt_if_needed(value)
+    return value
+
+
 def _upsert_faq_row(db: Session, payload: FaqItemPayload) -> FaqRecord:
     row = db.query(FaqRecord).filter(FaqRecord.faq_key == payload.id).first()
+    enc = get_settings().encrypt_faq
     values = {
-        "category": maybe_encrypt(payload.category),
-        "question": maybe_encrypt(payload.question),
-        "answer": maybe_encrypt(payload.answer),
-        "keywords_json": maybe_encrypt(json.dumps(payload.keywords, ensure_ascii=False)),
-        "aliases_json": maybe_encrypt(json.dumps(payload.aliases, ensure_ascii=False)),
-        "search_hints_json": maybe_encrypt(json.dumps(payload.search_hints, ensure_ascii=False)),
-        "source_files_json": maybe_encrypt(json.dumps(payload.source_files, ensure_ascii=False)),
+        "category": _crypt_value(payload.category, enc),
+        "question": _crypt_value(payload.question, enc),
+        "answer": _crypt_value(payload.answer, enc),
+        "keywords_json": _crypt_value(json.dumps(payload.keywords, ensure_ascii=False), enc),
+        "aliases_json": _crypt_value(json.dumps(payload.aliases, ensure_ascii=False), enc),
+        "search_hints_json": _crypt_value(json.dumps(payload.search_hints, ensure_ascii=False), enc),
+        "source_files_json": _crypt_value(json.dumps(payload.source_files, ensure_ascii=False), enc),
         "direct_answer": payload.direct_answer,
         "top_k": payload.top_k,
         "is_active": True,
@@ -409,7 +437,9 @@ def create_prompt(body: PromptPayload, db: Session = Depends(get_db), _: None = 
     existing = db.query(PromptConfig).filter(PromptConfig.prompt_key == body.prompt_key).first()
     if existing:
         raise HTTPException(status_code=409, detail="같은 키의 프롬프트가 이미 있습니다.")
-    row = PromptConfig(prompt_key=body.prompt_key, label=body.label, content=encrypt(body.content))
+    enc = get_settings().encrypt_prompt
+    stored_content = encrypt(body.content) if enc else body.content
+    row = PromptConfig(prompt_key=body.prompt_key, label=body.label, content=stored_content)
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -424,8 +454,9 @@ def update_prompt(prompt_key: str, body: PromptPayload, db: Session = Depends(ge
     row = db.query(PromptConfig).filter(PromptConfig.prompt_key == prompt_key).first()
     if not row:
         raise HTTPException(status_code=404, detail="프롬프트를 찾을 수 없습니다.")
+    enc = get_settings().encrypt_prompt
     row.label = body.label
-    row.content = encrypt(body.content)
+    row.content = encrypt(body.content) if enc else body.content
     db.commit()
     db.refresh(row)
     create_audit_log(db, "prompt_updated", "prompt", body.prompt_key, body.label)
@@ -498,6 +529,14 @@ class UpsertRowRequest(BaseModel):
     data: dict
 
 
+class UpdateColumnRequest(BaseModel):
+    column_name: str
+
+
+class ReorderColumnRequest(BaseModel):
+    direction: str  # "up" | "down"
+
+
 @router.get("/data-tables")
 def list_data_tables(db: Session = Depends(get_db), _: None = Depends(verify_admin)):
     tables = db.query(CustomTable).order_by(CustomTable.created_at.desc()).all()
@@ -530,6 +569,59 @@ def create_data_table(body: CreateTableRequest, db: Session = Depends(get_db), _
     db.commit()
     create_audit_log(db, "data_table_created", "custom_table", str(table.id), body.name)
     return {"id": table.id, "name": table.name, "description": table.description}
+
+
+@router.get("/data-tables/export-all")
+def export_all_data_tables(db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    tables = db.query(CustomTable).order_by(CustomTable.created_at.asc()).all()
+    inspector = sa_inspect(db.bind)
+    existing_tables = set(inspector.get_table_names())
+
+    wb = Workbook()
+    ws_index = wb.active
+    ws_index.title = "개요"
+    ws_index.append(["테이블명", "설명", "행 수", "생성일시"])
+
+    used_sheet_names: set[str] = {"개요"}
+
+    for t in tables:
+        real_table = f"cdata_{t.id}"
+        cols = db.query(CustomColumn).filter(CustomColumn.table_id == t.id).order_by(CustomColumn.sort_order, CustomColumn.id).all()
+        col_names = [c.column_name for c in cols]
+
+        rows: list = []
+        if real_table in existing_tables and col_names:
+            try:
+                select_cols = ", ".join([f'"{cn}"' for cn in col_names])
+                raw = db.execute(text(f'SELECT id, {select_cols}, created_at FROM "{real_table}" ORDER BY id')).fetchall()  # noqa: S608
+                rows = list(raw)
+            except Exception:
+                rows = []
+
+        ws_index.append([t.name, t.description or "", len(rows), t.created_at.isoformat() if t.created_at else ""])
+
+        # 시트 이름 충돌 방지
+        sheet_name = t.name[:28]
+        if sheet_name in used_sheet_names:
+            sheet_name = f"{sheet_name[:25]}_{t.id}"
+        used_sheet_names.add(sheet_name)
+
+        ws = wb.create_sheet(title=sheet_name)
+        ws.append(["ID"] + col_names + ["생성일시"])
+        for r in rows:
+            row_vals = list(r[1:-1]) if col_names else []
+            created = r[-1].isoformat() if r[-1] else ""
+            ws.append([r[0]] + row_vals + [created])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"all_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.delete("/data-tables/{table_id}")
@@ -609,6 +701,40 @@ def delete_column(table_id: int, column_id: int, db: Session = Depends(get_db), 
     return {"message": "컬럼이 삭제되었습니다."}
 
 
+@router.put("/data-tables/{table_id}/columns/{column_id}")
+def rename_column(table_id: int, column_id: int, body: UpdateColumnRequest, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    col = db.query(CustomColumn).filter(CustomColumn.id == column_id, CustomColumn.table_id == table_id).first()
+    if not col:
+        raise HTTPException(status_code=404, detail="컬럼을 찾을 수 없습니다.")
+    new_name = body.column_name.strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="컬럼 이름을 입력해주세요.")
+    old_name = col.column_name
+    real_table = f"cdata_{table_id}"
+    db.execute(text(f'ALTER TABLE "{real_table}" RENAME COLUMN "{old_name}" TO "{new_name}"'))  # noqa: S608
+    col.column_name = new_name
+    db.commit()
+    return {"id": col.id, "column_name": col.column_name, "column_type": col.column_type, "sort_order": col.sort_order}
+
+
+@router.post("/data-tables/{table_id}/columns/{column_id}/reorder")
+def reorder_column(table_id: int, column_id: int, body: ReorderColumnRequest, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    if body.direction not in {"up", "down"}:
+        raise HTTPException(status_code=400, detail="direction은 up 또는 down이어야 합니다.")
+    columns = db.query(CustomColumn).filter(CustomColumn.table_id == table_id).order_by(CustomColumn.sort_order, CustomColumn.id).all()
+    idx = next((i for i, c in enumerate(columns) if c.id == column_id), None)
+    if idx is None:
+        raise HTTPException(status_code=404, detail="컬럼을 찾을 수 없습니다.")
+    swap_idx = idx - 1 if body.direction == "up" else idx + 1
+    if swap_idx < 0 or swap_idx >= len(columns):
+        return {"message": "이동할 수 없습니다."}
+    columns[idx], columns[swap_idx] = columns[swap_idx], columns[idx]
+    for i, col in enumerate(columns):
+        col.sort_order = i
+    db.commit()
+    return {"message": "컬럼 순서를 변경했습니다."}
+
+
 @router.post("/data-tables/{table_id}/rows", status_code=201)
 def add_row(table_id: int, body: UpsertRowRequest, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
     if not db.query(CustomTable).filter(CustomTable.id == table_id).first():
@@ -678,6 +804,53 @@ def export_data_table(table_id: int, db: Session = Depends(get_db), _: None = De
     )
 
 
+@router.post("/data-tables/{table_id}/import")
+async def import_table_data(table_id: int, file: UploadFile = File(...), db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    table = db.query(CustomTable).filter(CustomTable.id == table_id).first()
+    if not table:
+        raise HTTPException(status_code=404, detail="테이블을 찾을 수 없습니다.")
+
+    fname = (file.filename or "").lower()
+    if not (fname.endswith(".csv") or fname.endswith(".xlsx") or fname.endswith(".xls")):
+        raise HTTPException(status_code=400, detail="CSV 또는 Excel(.xlsx/.xls) 파일만 업로드할 수 있습니다.")
+
+    cols = db.query(CustomColumn).filter(CustomColumn.table_id == table_id).order_by(CustomColumn.sort_order, CustomColumn.id).all()
+    col_names = [c.column_name for c in cols]
+    if not col_names:
+        raise HTTPException(status_code=400, detail="컬럼을 먼저 추가해주세요.")
+
+    content = await file.read()
+
+    if fname.endswith(".csv"):
+        text_content = content.decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(text_content))
+        raw_rows: list[dict] = [dict(r) for r in reader]
+    else:
+        from openpyxl import load_workbook as _load_wb
+        wb_in = _load_wb(io.BytesIO(content), read_only=True)
+        ws_in = wb_in.active
+        headers = [str(cell.value) if cell.value is not None else "" for cell in next(ws_in.iter_rows(max_row=1))]
+        raw_rows = []
+        for row in ws_in.iter_rows(min_row=2, values_only=True):
+            raw_rows.append(dict(zip(headers, [str(v) if v is not None else "" for v in row])))
+        wb_in.close()
+
+    real_table = f"cdata_{table_id}"
+    count = 0
+    for raw in raw_rows:
+        data = {cn: str(raw[cn]) for cn in col_names if cn in raw and raw[cn] not in (None, "")}
+        if not data:
+            continue
+        col_sql = ", ".join([f'"{k}"' for k in data])
+        val_sql = ", ".join([f":v{i}" for i in range(len(data))])
+        params = {f"v{i}": v for i, v in enumerate(data.values())}
+        db.execute(text(f'INSERT INTO "{real_table}" ({col_sql}) VALUES ({val_sql})'), params)  # noqa: S608
+        count += 1
+
+    db.commit()
+    return {"message": f"{count}개 행을 가져왔습니다.", "count": count}
+
+
 # ── DB 브라우저 ──────────────────────────────────────────────
 
 
@@ -745,6 +918,43 @@ def browse_db_table(
     return {"columns": columns, "rows": rows, "total": total, "page": page, "limit": limit}
 
 
+def _is_chat_model(model_id: str) -> bool:
+    if ":" in model_id:
+        return False
+    if "instruct" in model_id:
+        return False
+    prefixes = ("gpt-4", "gpt-3.5-turbo", "o1", "o3", "o4", "chatgpt")
+    return any(model_id.startswith(p) for p in prefixes)
+
+
+@router.get("/settings/model")
+async def get_model_settings(_: None = Depends(verify_admin)):
+    settings = get_settings()
+    try:
+        openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
+        response = await openai_client.models.list()
+        chat_models = sorted(
+            [m for m in response.data if _is_chat_model(m.id)],
+            key=lambda m: m.created,
+            reverse=True,
+        )
+        available_models = [m.id for m in chat_models]
+    except Exception:
+        available_models = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"]
+    return {"current_model": settings.model_name, "available_models": available_models}
+
+
+@router.put("/settings/model")
+def change_model(body: ModelChangeRequest, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    lines = ENV_PATH.read_text(encoding="utf-8").splitlines() if ENV_PATH.exists() else []
+    updated = [line for line in lines if not line.startswith("MODEL_NAME=")]
+    updated.append(f"MODEL_NAME={body.model_name}")
+    ENV_PATH.write_text("\n".join(updated) + "\n", encoding="utf-8")
+    get_settings.cache_clear()
+    create_audit_log(db, "model_changed", "system", "model_name", body.model_name)
+    return {"message": f"모델을 {body.model_name}으로 변경했습니다.", "model_name": body.model_name}
+
+
 @router.put("/password")
 def change_password(body: PasswordChangeRequest, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
     if not body.new_password or len(body.new_password) < 4:
@@ -756,3 +966,182 @@ def change_password(body: PasswordChangeRequest, db: Session = Depends(get_db), 
     get_settings.cache_clear()
     create_audit_log(db, "password_changed", "system", "admin_password")
     return {"message": "비밀번호를 변경했습니다."}
+
+
+# ── 권한 관리 ──────────────────────────────────────────────────
+
+
+class AddPermissionRequest(BaseModel):
+    email: str
+
+
+@router.get("/permissions")
+def list_permissions(db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    users = db.query(AdminUser).order_by(AdminUser.created_at).all()
+    return {"emails": [u.email for u in users]}
+
+
+@router.post("/permissions", status_code=201)
+def add_permission(body: AddPermissionRequest, db: Session = Depends(get_db), current_user: str = Depends(verify_admin)):
+    if not body.email or "@" not in body.email:
+        raise HTTPException(status_code=400, detail="유효한 이메일을 입력해주세요.")
+    if db.query(AdminUser).filter(AdminUser.email == body.email).first():
+        raise HTTPException(status_code=409, detail="이미 등록된 이메일입니다.")
+    user = AdminUser(email=body.email, added_by=current_user)
+    db.add(user)
+    db.commit()
+    create_audit_log(db, "permission_added", "admin_user", body.email, current_user)
+    return {"message": f"{body.email}에 권한을 부여했습니다."}
+
+
+@router.delete("/permissions/{email}")
+def remove_permission(email: str, db: Session = Depends(get_db), current_user: str = Depends(verify_admin)):
+    if email == get_settings().admin_email:
+        raise HTTPException(status_code=400, detail="기본 관리자 이메일은 제거할 수 없습니다.")
+    user = db.query(AdminUser).filter(AdminUser.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="등록되지 않은 이메일입니다.")
+    db.delete(user)
+    db.commit()
+    create_audit_log(db, "permission_removed", "admin_user", email, current_user)
+    return {"message": f"{email}의 권한을 제거했습니다."}
+
+
+# ── 암호화 설정 ─────────────────────────────────────────────────
+
+
+class EncryptionToggleRequest(BaseModel):
+    encrypt_enabled: bool
+
+
+class EncryptionMigrateRequest(BaseModel):
+    category: str
+    direction: str  # "encrypt" | "decrypt"
+
+
+def _count_encrypted(values: list[str | None]) -> int:
+    return sum(1 for v in values if v and v.startswith(ENCRYPTED_PREFIX))
+
+
+@router.get("/settings/encryption")
+def get_encryption_settings(db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    settings = get_settings()
+
+    faq_rows = db.query(FaqRecord).filter(FaqRecord.is_active.is_(True)).all()
+    faq_enc = _count_encrypted([r.answer for r in faq_rows])
+
+    prompt_rows = db.query(PromptConfig).all()
+    prompt_enc = _count_encrypted([r.content for r in prompt_rows])
+
+    doc_rows = db.query(DocumentRecord).filter(DocumentRecord.is_deleted.is_(False)).all()
+    doc_enc = _count_encrypted([r.original_filename for r in doc_rows])
+
+    return {
+        "categories": [
+            {
+                "key": "faq",
+                "label": "FAQ 내용",
+                "encrypt_enabled": settings.encrypt_faq,
+                "encrypted_count": faq_enc,
+                "plain_count": len(faq_rows) - faq_enc,
+                "total": len(faq_rows),
+            },
+            {
+                "key": "prompt",
+                "label": "프롬프트 내용",
+                "encrypt_enabled": settings.encrypt_prompt,
+                "encrypted_count": prompt_enc,
+                "plain_count": len(prompt_rows) - prompt_enc,
+                "total": len(prompt_rows),
+            },
+            {
+                "key": "document",
+                "label": "문서 파일명·검토내용",
+                "encrypt_enabled": settings.encrypt_document,
+                "encrypted_count": doc_enc,
+                "plain_count": len(doc_rows) - doc_enc,
+                "total": len(doc_rows),
+            },
+        ]
+    }
+
+
+@router.put("/settings/encryption/{category}")
+def toggle_encryption(category: str, body: EncryptionToggleRequest, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    if category not in {"faq", "prompt", "document"}:
+        raise HTTPException(status_code=400, detail="유효하지 않은 카테고리입니다.")
+    env_key = f"ENCRYPT_{category.upper()}"
+    env_value = "true" if body.encrypt_enabled else "false"
+    lines = ENV_PATH.read_text(encoding="utf-8").splitlines() if ENV_PATH.exists() else []
+    updated = [line for line in lines if not line.startswith(f"{env_key}=")]
+    updated.append(f"{env_key}={env_value}")
+    ENV_PATH.write_text("\n".join(updated) + "\n", encoding="utf-8")
+    get_settings.cache_clear()
+    create_audit_log(db, "encryption_toggled", "system", category, f"{env_key}={env_value}")
+    label = "활성화" if body.encrypt_enabled else "비활성화"
+    return {"message": f"{category} 암호화가 {label}되었습니다.", "category": category, "encrypt_enabled": body.encrypt_enabled}
+
+
+@router.post("/settings/encryption/migrate")
+def migrate_encryption(body: EncryptionMigrateRequest, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
+    if body.category not in {"faq", "prompt", "document"}:
+        raise HTTPException(status_code=400, detail="유효하지 않은 카테고리입니다.")
+    if body.direction not in {"encrypt", "decrypt"}:
+        raise HTTPException(status_code=400, detail="direction은 encrypt 또는 decrypt여야 합니다.")
+
+    count = 0
+
+    if body.category == "faq":
+        rows = db.query(FaqRecord).filter(FaqRecord.is_active.is_(True)).all()
+        fields = ["category", "question", "answer", "keywords_json", "aliases_json", "search_hints_json", "source_files_json"]
+        for row in rows:
+            changed = False
+            for field in fields:
+                value = getattr(row, field)
+                if not value:
+                    continue
+                if body.direction == "decrypt" and value.startswith(ENCRYPTED_PREFIX):
+                    setattr(row, field, decrypt_if_needed(value))
+                    changed = True
+                elif body.direction == "encrypt" and not value.startswith(ENCRYPTED_PREFIX):
+                    setattr(row, field, encrypt(value))
+                    changed = True
+            if changed:
+                count += 1
+        db.commit()
+
+    elif body.category == "prompt":
+        rows = db.query(PromptConfig).all()
+        for row in rows:
+            value = row.content
+            if not value:
+                continue
+            if body.direction == "decrypt" and value.startswith(ENCRYPTED_PREFIX):
+                row.content = decrypt_if_needed(value) or value
+                count += 1
+            elif body.direction == "encrypt" and not value.startswith(ENCRYPTED_PREFIX):
+                row.content = encrypt(value)
+                count += 1
+        db.commit()
+
+    elif body.category == "document":
+        rows = db.query(DocumentRecord).filter(DocumentRecord.is_deleted.is_(False)).all()
+        for row in rows:
+            changed = False
+            for field in ["original_filename", "review_note", "error_message"]:
+                value = getattr(row, field)
+                if not value:
+                    continue
+                if body.direction == "decrypt" and value.startswith(ENCRYPTED_PREFIX):
+                    setattr(row, field, decrypt_if_needed(value))
+                    changed = True
+                elif body.direction == "encrypt" and not value.startswith(ENCRYPTED_PREFIX):
+                    setattr(row, field, encrypt(value))
+                    changed = True
+            if changed:
+                count += 1
+        db.commit()
+
+    action = "암호화" if body.direction == "encrypt" else "복호화"
+    create_audit_log(db, f"encryption_migrated_{body.direction}", "system", body.category, f"{count}개 처리")
+    return {"message": f"{count}개 레코드를 {action}했습니다.", "count": count, "category": body.category, "direction": body.direction}

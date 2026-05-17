@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { adminApi, clearAdminPassword, getAdminPassword, saveAdminPassword } from '../services/api';
+import { GoogleLogin } from '@react-oauth/google';
+import { adminApi, clearAdminToken, getAdminToken, saveAdminToken } from '../services/api';
 import {
   AdminDocument,
   AdminDocumentDetail,
@@ -12,12 +13,14 @@ import {
   CustomTableSummary,
   DbTableData,
   DbTableMeta,
+  EncryptionSettings,
+  ModelSettings,
   ProcessingLog,
   PromptConfig,
   PromptPayload,
 } from '../types';
 
-type TabKey = 'documents' | 'faqs' | 'prompts' | 'chats' | 'data' | 'db';
+type TabKey = 'documents' | 'faqs' | 'prompts' | 'chats' | 'data' | 'db' | 'settings' | 'permissions';
 
 const EMPTY_FAQ: AdminFaq = {
   id: '',
@@ -57,9 +60,7 @@ function formatDate(value: string | null | undefined): string {
 }
 
 export default function AdminPage() {
-  const [authenticated, setAuthenticated] = useState(() => !!getAdminPassword());
-  const [passwordInput, setPasswordInput] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [authenticated, setAuthenticated] = useState(() => !!getAdminToken());
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
@@ -111,6 +112,22 @@ export default function AdminPage() {
   const [dbPage, setDbPage] = useState(1);
   const [dbLoading, setDbLoading] = useState(false);
 
+  // 모델 설정
+  const [modelSettings, setModelSettings] = useState<ModelSettings | null>(null);
+  const [modelSaving, setModelSaving] = useState(false);
+  const [modelLoadError, setModelLoadError] = useState('');
+
+  // 권한 관리
+  const [permissions, setPermissions] = useState<string[]>([]);
+  const [permLoading, setPermLoading] = useState(false);
+  const [newPermEmail, setNewPermEmail] = useState('');
+  const [permSaving, setPermSaving] = useState(false);
+
+  // 암호화 설정
+  const [encryptionSettings, setEncryptionSettings] = useState<EncryptionSettings | null>(null);
+  const [encryptionLoading, setEncryptionLoading] = useState(false);
+  const [migrating, setMigrating] = useState<string | null>(null);
+
   // 데이터 관리
   const [dataTables, setDataTables] = useState<CustomTableSummary[]>([]);
   const [selectedTable, setSelectedTable] = useState<CustomTableDetail | null>(null);
@@ -122,10 +139,15 @@ export default function AdminPage() {
   const [newColType, setNewColType] = useState('text');
   const [editingRow, setEditingRow] = useState<{ id: number | null; data: Record<string, string> } | null>(null);
   const [dataExporting, setDataExporting] = useState(false);
+  const [allExporting, setAllExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [editingColId, setEditingColId] = useState<number | null>(null);
+  const [editingColNameVal, setEditingColNameVal] = useState('');
 
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const mdInputRef = useRef<HTMLInputElement>(null);
   const faqMdInputRef = useRef<HTMLInputElement>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
   const resetFaqForm = () => {
@@ -163,6 +185,16 @@ export default function AdminPage() {
     }
   };
 
+  const loadModelSettings = async () => {
+    setModelLoadError('');
+    try {
+      const data = await adminApi.getModelSettings();
+      setModelSettings(data);
+    } catch {
+      setModelLoadError('모델 목록을 불러오지 못했습니다.');
+    }
+  };
+
   useEffect(() => {
     if (authenticated) {
       void loadDashboard();
@@ -183,21 +215,66 @@ export default function AdminPage() {
     }
   }, [activeTab, dbTables]);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!passwordInput.trim()) return;
-    setLoginLoading(true);
-    setLoginError('');
-    saveAdminPassword(passwordInput.trim());
+  useEffect(() => {
+    if (activeTab === 'settings') {
+      if (!modelSettings) void loadModelSettings();
+      if (!encryptionSettings) void loadEncryptionSettings();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'permissions' && authenticated) {
+      void loadPermissions();
+    }
+  }, [activeTab]);
+
+  const loadEncryptionSettings = async () => {
+    setEncryptionLoading(true);
     try {
-      await adminApi.getSessions();
-      setAuthenticated(true);
-      setNotice('');
+      const data = await adminApi.getEncryptionSettings();
+      setEncryptionSettings(data);
     } catch {
-      clearAdminPassword();
-      setLoginError('관리자 비밀번호가 올바르지 않습니다.');
+      setNotice('암호화 설정을 불러오지 못했습니다.');
     } finally {
-      setLoginLoading(false);
+      setEncryptionLoading(false);
+    }
+  };
+
+  const handleToggleEncryption = async (category: string, enabled: boolean) => {
+    try {
+      const result = await adminApi.toggleEncryption(category, enabled);
+      setNotice(result.message);
+      await loadEncryptionSettings();
+    } catch {
+      setNotice('암호화 설정 변경에 실패했습니다.');
+    }
+  };
+
+  const handleMigrateEncryption = async (category: string, direction: 'encrypt' | 'decrypt') => {
+    const action = direction === 'decrypt' ? '복호화' : '암호화';
+    const label = encryptionSettings?.categories.find((c) => c.key === category)?.label ?? category;
+    if (!window.confirm(`[${label}] 전체 레코드를 ${action}할까요?\n이 작업은 되돌리기 어렵습니다.`)) return;
+    setMigrating(`${category}_${direction}`);
+    try {
+      const result = await adminApi.migrateEncryption(category, direction);
+      setNotice(result.message);
+      await loadEncryptionSettings();
+    } catch {
+      setNotice('일괄 마이그레이션에 실패했습니다.');
+    } finally {
+      setMigrating(null);
+    }
+  };
+
+  const loadPermissions = async () => {
+    setPermLoading(true);
+    try {
+      const result = await adminApi.getPermissions();
+      setPermissions(result.emails);
+    } catch {
+      setNotice('권한 목록을 불러오지 못했습니다.');
+    } finally {
+      setPermLoading(false);
     }
   };
 
@@ -431,6 +508,59 @@ export default function AdminPage() {
     }
   };
 
+  const handleExportAll = async () => {
+    setAllExporting(true);
+    try {
+      await adminApi.exportAllDataTables();
+      setNotice('전체 데이터를 엑셀로 내보냈습니다.');
+    } catch {
+      setNotice('전체 내보내기에 실패했습니다.');
+    } finally {
+      setAllExporting(false);
+    }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedTable) return;
+    setImporting(true);
+    try {
+      const result = await adminApi.importTableData(selectedTable.id, file);
+      setNotice(result.message);
+      await loadTableDetail(selectedTable.id);
+      await loadDataTables();
+    } catch {
+      setNotice('가져오기에 실패했습니다. 파일 형식과 컬럼명을 확인해주세요.');
+    } finally {
+      setImporting(false);
+      if (importFileRef.current) importFileRef.current.value = '';
+    }
+  };
+
+  const handleRenameColumn = async (colId: number) => {
+    if (!selectedTable || !editingColNameVal.trim()) { setEditingColId(null); return; }
+    const col = selectedTable.columns.find((c) => c.id === colId);
+    if (!col || col.column_name === editingColNameVal.trim()) { setEditingColId(null); return; }
+    try {
+      await adminApi.renameColumn(selectedTable.id, colId, editingColNameVal.trim());
+      await loadTableDetail(selectedTable.id);
+    } catch {
+      setNotice('컬럼 이름 변경에 실패했습니다.');
+    } finally {
+      setEditingColId(null);
+    }
+  };
+
+  const handleReorderColumn = async (colId: number, direction: 'up' | 'down') => {
+    if (!selectedTable) return;
+    try {
+      await adminApi.reorderColumn(selectedTable.id, colId, direction);
+      await loadTableDetail(selectedTable.id);
+    } catch {
+      setNotice('컬럼 순서 변경에 실패했습니다.');
+    }
+  };
+
   const handleCreateTable = async () => {
     if (!newTableName.trim()) return;
     try {
@@ -560,22 +690,37 @@ export default function AdminPage() {
     return (
       <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#ecfeff,_#f8fafc_55%)]">
         <div className="mx-auto flex min-h-screen max-w-md items-center px-6">
-          <form onSubmit={handleLogin} className="w-full rounded-3xl border border-cyan-100 bg-white/95 p-8 shadow-xl shadow-cyan-100/50">
+          <div className="w-full rounded-3xl border border-cyan-100 bg-white/95 p-8 shadow-xl shadow-cyan-100/50">
             <h1 className="text-2xl font-semibold text-slate-900">관리자 로그인</h1>
-            <p className="mt-2 text-sm text-slate-500">운영 데이터는 관리자 화면에서만 복호화해 확인합니다.</p>
-            <div className="mt-6 space-y-3">
-              <div className="relative">
-                <input type={showPassword ? 'text' : 'password'} value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} placeholder="관리자 비밀번호" className={INPUT_CLASS} autoFocus />
-                <button type="button" onClick={() => setShowPassword((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600">
-                  {showPassword ? '숨기기' : '표시'}
-                </button>
-              </div>
-              {loginError && <p className="text-sm text-rose-600">{loginError}</p>}
-              <button type="submit" disabled={loginLoading || !passwordInput.trim()} className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white disabled:opacity-50">
-                {loginLoading ? '확인 중...' : '로그인'}
-              </button>
+            <p className="mt-2 text-sm text-slate-500">등록된 Google 계정으로 로그인하세요.</p>
+            {loginError && (
+              <p className="mt-4 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{loginError}</p>
+            )}
+            <div className="mt-6 flex justify-center">
+              {loginLoading ? (
+                <p className="text-sm text-slate-400">로그인 중...</p>
+              ) : (
+                <GoogleLogin
+                  onSuccess={async (credentialResponse) => {
+                    if (!credentialResponse.credential) return;
+                    setLoginLoading(true);
+                    setLoginError('');
+                    try {
+                      const result = await adminApi.verifyGoogleToken(credentialResponse.credential);
+                      saveAdminToken(result.token);
+                      setAuthenticated(true);
+                    } catch {
+                      setLoginError('접근 권한이 없는 계정입니다. 관리자에게 문의하세요.');
+                    } finally {
+                      setLoginLoading(false);
+                    }
+                  }}
+                  onError={() => setLoginError('Google 로그인에 실패했습니다.')}
+                  useOneTap
+                />
+              )}
             </div>
-          </form>
+          </div>
         </div>
       </div>
     );
@@ -603,7 +748,7 @@ export default function AdminPage() {
               >
                 {loading ? '새로고침 중...' : '새로고침'}
               </button>
-              <button onClick={() => { clearAdminPassword(); setAuthenticated(false); }} className="rounded-xl bg-white px-4 py-2 text-sm font-medium text-slate-900">
+              <button onClick={() => { clearAdminToken(); setAuthenticated(false); }} className="rounded-xl bg-white px-4 py-2 text-sm font-medium text-slate-900">
                 로그아웃
               </button>
             </div>
@@ -618,6 +763,8 @@ export default function AdminPage() {
             ['chats', '로그/내보내기'],
             ['data', '데이터 관리'],
             ['db', 'DB 브라우저'],
+            ['settings', '설정'],
+            ['permissions', '권한 관리'],
           ] as [TabKey, string][]).map(([key, label]) => (
             <button key={key} onClick={() => setActiveTab(key)} className={`rounded-full px-4 py-2 text-sm font-medium ${activeTab === key ? 'bg-slate-900 text-white' : 'bg-white text-slate-600'}`}>
               {label}
@@ -939,9 +1086,19 @@ export default function AdminPage() {
             {/* 왼쪽: 테이블 목록 */}
             <div className="w-64 shrink-0">
               <div className="rounded-3xl bg-white p-4 shadow-sm">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-1">
                   <h2 className="text-sm font-semibold text-slate-900">테이블 목록</h2>
-                  <button onClick={() => setShowNewTableForm((v) => !v)} className="rounded-lg bg-slate-900 px-2 py-1 text-xs font-medium text-white">+ 새 테이블</button>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => void handleExportAll()}
+                      disabled={allExporting || dataTables.length === 0}
+                      title="모든 테이블을 하나의 엑셀 파일로 내보냅니다"
+                      className="rounded-lg bg-emerald-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-40"
+                    >
+                      {allExporting ? '…' : '전체 내보내기'}
+                    </button>
+                    <button onClick={() => setShowNewTableForm((v) => !v)} className="rounded-lg bg-slate-900 px-2 py-1 text-xs font-medium text-white">+ 새 테이블</button>
+                  </div>
                 </div>
                 {showNewTableForm && (
                   <div className="mt-3 space-y-2">
@@ -988,31 +1145,88 @@ export default function AdminPage() {
                         <h2 className="text-lg font-semibold text-slate-900">{selectedTable.name}</h2>
                         {selectedTable.description && <p className="mt-1 text-sm text-slate-500">{selectedTable.description}</p>}
                       </div>
-                      <div className="flex shrink-0 gap-2">
-                        <button onClick={() => void handleExportTable()} disabled={dataExporting} className="rounded-xl bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">{dataExporting ? '처리 중...' : '엑셀 다운로드'}</button>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        {/* CSV/Excel 가져오기 */}
+                        <input
+                          ref={importFileRef}
+                          type="file"
+                          accept=".csv,.xlsx,.xls"
+                          className="hidden"
+                          onChange={(e) => void handleImport(e)}
+                        />
+                        <button
+                          onClick={() => importFileRef.current?.click()}
+                          disabled={importing || selectedTable.columns.length === 0}
+                          title="CSV 또는 Excel 파일의 행을 이 테이블로 가져옵니다"
+                          className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                        >
+                          {importing ? '가져오는 중...' : 'CSV/Excel 가져오기'}
+                        </button>
+                        <button onClick={() => void handleExportTable()} disabled={dataExporting} className="rounded-xl bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">{dataExporting ? '처리 중...' : '엑셀 내보내기'}</button>
                         <button onClick={() => void handleDeleteTable(selectedTable.id)} className="rounded-xl bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-600 hover:bg-rose-100">테이블 삭제</button>
                       </div>
                     </div>
 
                     {/* 컬럼 관리 */}
                     <div className="mt-4 border-t border-slate-100 pt-4">
-                      <h3 className="mb-2 text-sm font-medium text-slate-700">컬럼 관리</h3>
+                      <h3 className="mb-3 text-sm font-medium text-slate-700">컬럼 관리 <span className="font-normal text-slate-400 text-xs ml-1">이름 클릭 시 변경 · ↑↓ 순서 변경</span></h3>
                       <div className="flex flex-wrap gap-2">
-                        {selectedTable.columns.map((col) => (
-                          <span key={col.id} className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-700">
-                            {col.column_name}
+                        {selectedTable.columns.map((col, colIdx) => (
+                          <span key={col.id} className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700">
+                            {/* 순서 버튼 */}
+                            <button
+                              onClick={() => void handleReorderColumn(col.id, 'up')}
+                              disabled={colIdx === 0}
+                              className="text-slate-300 hover:text-slate-600 disabled:opacity-20 leading-none"
+                              title="위로"
+                            >↑</button>
+                            <button
+                              onClick={() => void handleReorderColumn(col.id, 'down')}
+                              disabled={colIdx === selectedTable.columns.length - 1}
+                              className="text-slate-300 hover:text-slate-600 disabled:opacity-20 leading-none"
+                              title="아래로"
+                            >↓</button>
+                            {/* 컬럼 이름 (클릭하면 인라인 편집) */}
+                            {editingColId === col.id ? (
+                              <input
+                                autoFocus
+                                value={editingColNameVal}
+                                onChange={(e) => setEditingColNameVal(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') void handleRenameColumn(col.id);
+                                  if (e.key === 'Escape') setEditingColId(null);
+                                }}
+                                onBlur={() => void handleRenameColumn(col.id)}
+                                className="w-24 rounded border border-cyan-400 bg-white px-1 py-0.5 text-xs outline-none"
+                              />
+                            ) : (
+                              <button
+                                onClick={() => { setEditingColId(col.id); setEditingColNameVal(col.column_name); }}
+                                className="font-medium hover:text-cyan-700"
+                                title="클릭하여 이름 변경"
+                              >
+                                {col.column_name}
+                              </button>
+                            )}
                             <span className="text-slate-400">({col.column_type})</span>
-                            <button onClick={() => void handleDeleteColumn(col.id)} className="ml-1 text-slate-400 hover:text-rose-500">×</button>
+                            <button onClick={() => void handleDeleteColumn(col.id)} className="ml-0.5 text-slate-300 hover:text-rose-500" title="컬럼 삭제">×</button>
                           </span>
                         ))}
+                        {/* 새 컬럼 추가 */}
                         <div className="flex items-center gap-1">
-                          <input value={newColName} onChange={(e) => setNewColName(e.target.value)} placeholder="컬럼 이름" className="w-28 rounded-full border border-slate-200 px-3 py-1 text-xs outline-none focus:border-slate-400" onKeyDown={(e) => { if (e.key === 'Enter') void handleAddColumn(); }} />
-                          <select value={newColType} onChange={(e) => setNewColType(e.target.value)} className="rounded-full border border-slate-200 px-2 py-1 text-xs outline-none">
+                          <input
+                            value={newColName}
+                            onChange={(e) => setNewColName(e.target.value)}
+                            placeholder="컬럼 이름"
+                            className="w-28 rounded-xl border border-dashed border-slate-300 px-3 py-1.5 text-xs outline-none focus:border-slate-400"
+                            onKeyDown={(e) => { if (e.key === 'Enter') void handleAddColumn(); }}
+                          />
+                          <select value={newColType} onChange={(e) => setNewColType(e.target.value)} className="rounded-xl border border-dashed border-slate-300 px-2 py-1.5 text-xs outline-none">
                             <option value="text">텍스트</option>
                             <option value="number">숫자</option>
                             <option value="date">날짜</option>
                           </select>
-                          <button onClick={() => void handleAddColumn()} disabled={!newColName.trim()} className="rounded-full bg-slate-900 px-3 py-1 text-xs font-medium text-white disabled:opacity-40">+ 추가</button>
+                          <button onClick={() => void handleAddColumn()} disabled={!newColName.trim()} className="rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40">+ 추가</button>
                         </div>
                       </div>
                     </div>
@@ -1197,6 +1411,229 @@ export default function AdminPage() {
                 </div>
               ) : null}
             </div>
+          </div>
+        )}
+
+        {activeTab === 'permissions' && (
+          <div className="mt-6 space-y-6">
+            <section className="rounded-3xl bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-slate-900">권한 관리</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                관리자 페이지에 접근할 수 있는 Google 계정 이메일을 관리합니다.
+                <br />
+                <span className="text-xs text-slate-400">환경변수 <code className="font-mono">ADMIN_EMAIL</code>로 등록된 기본 관리자는 목록에 표시되지 않으며 삭제할 수 없습니다.</span>
+              </p>
+
+              <div className="mt-5 flex gap-2">
+                <input
+                  value={newPermEmail}
+                  onChange={(e) => setNewPermEmail(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                  placeholder="추가할 Google 이메일"
+                  className={INPUT_CLASS + ' max-w-sm'}
+                />
+                <button
+                  disabled={permSaving || !newPermEmail.trim()}
+                  onClick={async () => {
+                    setPermSaving(true);
+                    try {
+                      await adminApi.addPermission(newPermEmail.trim());
+                      setNewPermEmail('');
+                      setNotice('권한을 추가했습니다.');
+                      await loadPermissions();
+                    } catch {
+                      setNotice('권한 추가에 실패했습니다. 이미 등록된 이메일일 수 있습니다.');
+                    } finally {
+                      setPermSaving(false);
+                    }
+                  }}
+                  className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                >
+                  {permSaving ? '추가 중...' : '추가'}
+                </button>
+              </div>
+
+              <div className="mt-4">
+                {permLoading ? (
+                  <p className="text-sm text-slate-400">불러오는 중...</p>
+                ) : permissions.length === 0 ? (
+                  <p className="text-sm text-slate-400">등록된 이메일이 없습니다. (기본 관리자 계정만 접근 가능)</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {permissions.map((email) => (
+                      <li key={email} className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-3">
+                        <span className="text-sm text-slate-700">{email}</span>
+                        <button
+                          onClick={async () => {
+                            if (!window.confirm(`${email}의 권한을 제거할까요?`)) return;
+                            try {
+                              await adminApi.removePermission(email);
+                              setNotice('권한을 제거했습니다.');
+                              await loadPermissions();
+                            } catch {
+                              setNotice('권한 제거에 실패했습니다.');
+                            }
+                          }}
+                          className="text-xs text-rose-500 hover:text-rose-700"
+                        >
+                          제거
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {activeTab === 'settings' && (
+          <div className="mt-6 space-y-6">
+            <section className="rounded-3xl bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">암호화 설정</h2>
+                  <p className="mt-1 text-sm text-slate-500">카테고리별 암호화 ON/OFF와 기존 데이터 일괄 변환을 관리합니다.</p>
+                </div>
+                <button onClick={() => { setEncryptionSettings(null); void loadEncryptionSettings(); }} className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm text-slate-600">새로고침</button>
+              </div>
+
+              {encryptionLoading && <p className="mt-4 text-sm text-slate-400">불러오는 중...</p>}
+
+              {encryptionSettings && (
+                <div className="mt-5 space-y-4">
+                  {/* 항상 암호화 카테고리 안내 */}
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-slate-700">채팅 내용 (메시지·세션)</p>
+                        <p className="mt-0.5 text-xs text-slate-400">개인정보 보호를 위해 항상 암호화됩니다. 관리자가 변경할 수 없습니다.</p>
+                      </div>
+                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">항상 ON</span>
+                    </div>
+                  </div>
+
+                  {/* 설정 가능한 카테고리 */}
+                  {encryptionSettings.categories.map((cat) => (
+                    <div key={cat.key} className="rounded-2xl border border-slate-200 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                          <p className="text-sm font-medium text-slate-900">{cat.label}</p>
+                          <div className="mt-1.5 flex flex-wrap gap-3 text-xs text-slate-500">
+                            <span>전체 {cat.total}건</span>
+                            <span className="text-amber-600">암호화 {cat.encrypted_count}건</span>
+                            <span className="text-emerald-600">평문 {cat.plain_count}건</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <label className="flex cursor-pointer items-center gap-2">
+                            <div className="relative">
+                              <input
+                                type="checkbox"
+                                className="sr-only"
+                                checked={cat.encrypt_enabled}
+                                onChange={(e) => void handleToggleEncryption(cat.key, e.target.checked)}
+                              />
+                              <div className={`h-6 w-11 rounded-full transition-colors ${cat.encrypt_enabled ? 'bg-cyan-600' : 'bg-slate-300'}`} />
+                              <div className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${cat.encrypt_enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                            </div>
+                            <span className="text-sm font-medium text-slate-700">{cat.encrypt_enabled ? '암호화 ON' : '암호화 OFF'}</span>
+                          </label>
+                        </div>
+                      </div>
+                      {cat.total > 0 && (
+                        <div className="mt-3 flex gap-2 border-t border-slate-100 pt-3">
+                          <button
+                            disabled={migrating !== null || cat.plain_count === 0}
+                            onClick={() => void handleMigrateEncryption(cat.key, 'encrypt')}
+                            className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                          >
+                            {migrating === `${cat.key}_encrypt` ? '처리 중...' : `평문 → 암호화 (${cat.plain_count}건)`}
+                          </button>
+                          <button
+                            disabled={migrating !== null || cat.encrypted_count === 0}
+                            onClick={() => void handleMigrateEncryption(cat.key, 'decrypt')}
+                            className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                          >
+                            {migrating === `${cat.key}_decrypt` ? '처리 중...' : `암호화 → 평문 (${cat.encrypted_count}건)`}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="rounded-3xl bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-slate-900">LLM 모델 설정</h2>
+              <p className="mt-1 text-sm text-slate-500">OpenAI에서 사용 가능한 채팅 모델 목록을 불러옵니다. 변경 즉시 모든 답변에 적용됩니다.</p>
+
+              {modelLoadError && (
+                <div className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{modelLoadError}</div>
+              )}
+
+              {!modelSettings && !modelLoadError && (
+                <p className="mt-4 text-sm text-slate-400">불러오는 중...</p>
+              )}
+
+              {modelSettings && (
+                <div className="mt-5 space-y-4">
+                  <div>
+                    <p className="mb-1 text-xs font-medium text-slate-500">현재 모델</p>
+                    <p className="font-mono text-sm font-semibold text-cyan-700">{modelSettings.current_model}</p>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">모델 변경</label>
+                    <div className="flex gap-2">
+                      <select
+                        className={INPUT_CLASS + ' max-w-sm'}
+                        defaultValue={modelSettings.current_model}
+                        id="model-select"
+                      >
+                        {modelSettings.available_models.map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                        {!modelSettings.available_models.includes(modelSettings.current_model) && (
+                          <option value={modelSettings.current_model}>{modelSettings.current_model} (현재)</option>
+                        )}
+                      </select>
+                      <button
+                        disabled={modelSaving}
+                        onClick={async () => {
+                          const select = document.getElementById('model-select') as HTMLSelectElement;
+                          const selected = select?.value;
+                          if (!selected) return;
+                          setModelSaving(true);
+                          try {
+                            const result = await adminApi.setModel(selected);
+                            setModelSettings({ ...modelSettings, current_model: result.model_name });
+                            setNotice(result.message);
+                          } catch {
+                            setNotice('모델 변경에 실패했습니다.');
+                          } finally {
+                            setModelSaving(false);
+                          }
+                        }}
+                        className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                      >
+                        {modelSaving ? '저장 중...' : '적용'}
+                      </button>
+                      <button
+                        onClick={() => { setModelSettings(null); void loadModelSettings(); }}
+                        className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-600"
+                      >
+                        새로고침
+                      </button>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-400">
+                      목록은 OpenAI API에서 실시간으로 조회합니다. 새 모델이 출시되면 자동으로 반영됩니다.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </section>
           </div>
         )}
       </div>

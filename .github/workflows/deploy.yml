@@ -21,6 +21,8 @@ jobs:
           AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
           LANGSMITH_PROJECT: ${{ secrets.LANGSMITH_PROJECT }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
         run: |
           cd ~/document-chatbot_practice
           git fetch origin
@@ -40,6 +42,9 @@ jobs:
           LANGSMITH_API_KEY=$LANGSMITH_API_KEY
           LANGSMITH_PROJECT=$LANGSMITH_PROJECT
           LANGSMITH_TRACING_V2=true
+          GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
+          JWT_SECRET=$JWT_SECRET
+          ADMIN_EMAIL=$ADMIN_EMAIL
           EOF
           echo "VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID" > frontend/.env
           source backend/venv/bin/activate

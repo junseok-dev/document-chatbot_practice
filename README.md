@@ -17,8 +17,9 @@
 9. [보안 설계](#9-보안-설계)
 10. [프론트엔드 구조](#10-프론트엔드-구조)
 11. [관리자 대시보드 기능](#11-관리자-대시보드-기능)
-12. [디렉토리 구조](#12-디렉토리-구조)
-13. [변경 이력](#13-변경-이력)
+12. [RAGAS 품질 평가](#12-rag-품질-평가-결과-ragas)
+13. [디렉토리 구조](#13-디렉토리-구조)
+14. [변경 이력](#14-변경-이력)
 
 ---
 
@@ -33,8 +34,10 @@
 - 실시간 스트리밍 응답 (Server-Sent Events, 타이핑 효과)
 - 대화 이력 기반 맥락 파악 — 연속 질문을 자연스럽게 이어서 답변
 - 여러 질문 동시 처리 — 한 메시지에 여러 질문이 있을 때 통합 답변
-- 관리자 대시보드: 문서 업로드/승인, FAQ 관리, 프롬프트 편집, 상담 기록 조회, 데이터 관리, DB 브라우저
-- 개인정보 및 메시지 내용 Fernet 암호화 저장
+- 관리자 대시보드: 문서 업로드/승인, FAQ 관리, 프롬프트 편집, 상담 기록 조회, 데이터 관리, DB 브라우저, 권한 관리, 설정
+- Google OAuth 2.0 기반 관리자 인증 (JWT 세션, 등록된 이메일만 접근)
+- 런타임 LLM 모델 변경 (재시작 없이 OpenAI 모델 즉시 교체)
+- 카테고리별 Fernet 암호화 관리 (ON/OFF 토글 + 일괄 암호화↔복호화)
 - 경비 시스템(Guardrail): 프롬프트 인젝션, 욕설, 개인정보, 경쟁사 언급 감지 및 차단
 
 ---
@@ -48,13 +51,14 @@
 | 웹 프레임워크 | FastAPI + Uvicorn |
 | ORM | SQLAlchemy |
 | 데이터베이스 | AWS Aurora RDS (PostgreSQL 호환) |
-| LLM | OpenAI `gpt-5-mini` |
+| LLM | OpenAI GPT (런타임 모델 선택 가능, 기본 `gpt-5-mini`) |
 | 임베딩 | OpenAI `text-embedding-3-small` (1536차원) |
 | 벡터 DB | FAISS (로컬 인덱스, S3 동기화) |
 | LangChain | `langchain-openai`, `langchain-community`, `langchain-text-splitters` |
 | PDF 처리 | `opendataloader-pdf` |
 | 오브젝트 스토리지 | AWS S3 (`boto3`) |
 | 암호화 | `cryptography` (Fernet 대칭 암호화) |
+| 인증 | `google-auth[requests]` + `PyJWT` (Google OAuth 2.0 + JWT) |
 | 엑셀 내보내기 | `openpyxl` |
 
 ### 프론트엔드
@@ -68,7 +72,7 @@
 | 라우팅 | React Router v6 |
 | 마크다운 렌더링 | react-markdown |
 | 아이콘 | lucide-react |
-| OAuth | React OAuth Google |
+| OAuth | `@react-oauth/google` (Google One Tap 로그인) |
 
 ### 인프라 / DevOps
 
@@ -289,10 +293,11 @@ POST /api/chat/stream
 | `chat_sessions` | 사용자 채팅 세션 | `encrypted_user_name` |
 | `chat_messages` | 개별 메시지 | `content` |
 | `chat_logs` | 상담 로그 (API 비용 포함) | `question`, `answer`, `retrieval_chunks` |
-| `documents` | 업로드 문서 메타 | `original_filename`, `error_message` |
+| `documents` | 업로드 문서 메타 | `original_filename`, `error_message` (설정에 따라) |
 | `chunks` | 문서 청크 | `content` |
-| `faqs` | FAQ 항목 | `category`, `question`, `answer`, `keywords_json`, `aliases_json`, `search_hints_json` |
-| `prompt_configs` | 시스템 프롬프트 관리 | — |
+| `faqs` | FAQ 항목 | 암호화 설정에 따라 선택적 적용 |
+| `prompt_configs` | 시스템 프롬프트 관리 | 암호화 설정에 따라 선택적 적용 |
+| `admin_users` | 관리자 권한 이메일 목록 | — |
 | `admin_audit_logs` | 관리자 작업 감시 로그 | — |
 | `cancel_requests` | 취소/환불 요청 기록 | — |
 | `processing_logs` | 문서 처리 상태 로그 | — |
@@ -308,6 +313,8 @@ POST /api/chat/stream
 encrypt("민감한 텍스트")          # → "enc::gAAAAAB..."
 decrypt_if_needed("enc::gAAAAAB...") # → "민감한 텍스트"
 ```
+
+카테고리별 암호화 ON/OFF는 `.env`의 `ENCRYPT_FAQ` / `ENCRYPT_PROMPT` / `ENCRYPT_DOCUMENT` 값으로 제어되며, 관리자 대시보드 설정 탭에서 토글 및 일괄 마이그레이션(평문↔암호화) 가능. 채팅 내용은 항상 암호화.
 
 ### SQLite → Aurora RDS 마이그레이션
 
@@ -330,7 +337,21 @@ python scripts/migrate_sqlite_to_rds.py
 | `POST` | `/api/chat/stream` | 스트리밍 채팅 (SSE) |
 | `GET` | `/api/chat/suggested` | 추천 질문 목록 |
 
-### 관리자 API (`X-Admin-Password` 헤더 필요)
+### 관리자 API (`Authorization: Bearer <JWT>` 헤더 필요)
+
+**인증**
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| `POST` | `/api/admin/auth/verify` | Google ID Token 검증 → JWT 발급 (8시간 유효) |
+
+**권한 관리**
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| `GET` | `/api/admin/permissions` | 등록된 관리자 이메일 목록 |
+| `POST` | `/api/admin/permissions` | 이메일 추가 |
+| `DELETE` | `/api/admin/permissions/{email}` | 이메일 제거 |
 
 **문서 관리**
 
@@ -378,20 +399,34 @@ python scripts/migrate_sqlite_to_rds.py
 | `GET` | `/api/admin/chat-logs` | 상담 로그 (start_date, end_date, session_id 필터) |
 | `GET` | `/api/admin/chat-logs/export` | 상담 로그 Excel 내보내기 |
 
-**데이터 관리** (사용자 정의 데이터 테이블 — 비개발자용 DBeaver)
+**설정**
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| `GET` | `/api/admin/settings/model` | 현재 모델 + OpenAI 사용 가능 모델 목록 |
+| `PUT` | `/api/admin/settings/model` | LLM 모델 변경 (.env 갱신 + 캐시 clear, 재시작 불필요) |
+| `GET` | `/api/admin/settings/encryption` | 카테고리별 암호화 설정 + 암호화/평문 레코드 수 |
+| `PUT` | `/api/admin/settings/encryption/{category}` | 암호화 ON/OFF 토글 (faq / prompt / document) |
+| `POST` | `/api/admin/settings/encryption/migrate` | 해당 카테고리 전체 레코드 일괄 암호화↔복호화 |
+
+**데이터 관리** (사용자 정의 데이터 테이블)
 
 | 메서드 | 경로 | 설명 |
 |--------|------|------|
 | `GET` | `/api/admin/data-tables` | 테이블 목록 |
 | `POST` | `/api/admin/data-tables` | 테이블 생성 → RDS에 실제 `cdata_{id}` SQL 테이블 CREATE |
+| `GET` | `/api/admin/data-tables/export-all` | 모든 테이블을 개요+시트별로 묶어 Excel 1개 다운로드 |
 | `DELETE` | `/api/admin/data-tables/{id}` | 테이블 삭제 → `cdata_{id}` DROP TABLE |
 | `GET` | `/api/admin/data-tables/{id}` | 테이블 상세 (컬럼 + 데이터 행) |
 | `POST` | `/api/admin/data-tables/{id}/columns` | 컬럼 추가 → ALTER TABLE ADD COLUMN |
+| `PUT` | `/api/admin/data-tables/{id}/columns/{cid}` | 컬럼 이름 변경 → ALTER TABLE RENAME COLUMN |
+| `POST` | `/api/admin/data-tables/{id}/columns/{cid}/reorder` | 컬럼 순서 위/아래 이동 |
 | `DELETE` | `/api/admin/data-tables/{id}/columns/{cid}` | 컬럼 삭제 → ALTER TABLE DROP COLUMN |
 | `POST` | `/api/admin/data-tables/{id}/rows` | 행 추가 → INSERT INTO |
 | `PUT` | `/api/admin/data-tables/{id}/rows/{rid}` | 행 수정 → UPDATE |
 | `DELETE` | `/api/admin/data-tables/{id}/rows/{rid}` | 행 삭제 → DELETE |
-| `GET` | `/api/admin/data-tables/{id}/export` | Excel 내보내기 |
+| `GET` | `/api/admin/data-tables/{id}/export` | 개별 테이블 Excel 내보내기 |
+| `POST` | `/api/admin/data-tables/{id}/import` | CSV / Excel 파일로 행 일괄 가져오기 |
 
 **DB 브라우저** (RDS 전체 테이블 조회)
 
@@ -455,13 +490,17 @@ s3://<bucket>/document-chatbot/
 |------------|------|
 | `OPENAI_API_KEY` | OpenAI API 인증 |
 | `ENCRYPTION_KEY` | Fernet 암호화 키 (base64) |
-| `ADMIN_PASSWORD` | 관리자 API 인증 비밀번호 |
+| `ADMIN_PASSWORD` | 레거시 (현재 Google OAuth로 대체, 유지 가능) |
 | `DATABASE_URL` | Aurora RDS 연결 문자열 |
 | `AWS_ACCESS_KEY_ID` | AWS 자격증명 |
 | `AWS_SECRET_ACCESS_KEY` | AWS 자격증명 |
 | `AWS_S3_BUCKET` | S3 버킷명 |
 | `CHANNEL_TALK_URL` | 채널톡 상담원 연결 URL |
-| `VITE_GOOGLE_CLIENT_ID` | Google OAuth 클라이언트 ID |
+| `VITE_GOOGLE_CLIENT_ID` | Google OAuth 클라이언트 ID (프론트 + 백엔드 공용) |
+| `JWT_SECRET` | JWT 서명 비밀키 (8시간 세션 토큰) |
+| `ADMIN_EMAIL` | 최초 부트스트랩 관리자 이메일 (DB 없이도 항상 접근 가능) |
+| `LANGSMITH_API_KEY` | LangSmith 추적 |
+| `LANGSMITH_PROJECT` | LangSmith 프로젝트명 |
 
 ---
 
@@ -485,14 +524,22 @@ s3://<bucket>/document-chatbot/
 - **대상**: 사용자 이름, 메시지 내용, 상담 질문/답변, FAQ 전체 내용
 - **식별자**: 암호화된 값은 `enc::` 접두사로 구분하여 선택적 복호화
 
-### 관리자 인증
+### 관리자 인증 (Google OAuth 2.0 + JWT)
 
 ```
-모든 /api/admin/* 요청에 헤더 필요:
-X-Admin-Password: <ADMIN_PASSWORD>
+1. 관리자 → Google One Tap 로그인 → Google ID Token 발급
+2. POST /api/admin/auth/verify  { credential: "<Google ID Token>" }
+   → google-auth로 토큰 검증
+   → 이메일이 ADMIN_EMAIL 또는 admin_users 테이블에 있으면 허용
+   → JWT(8시간 유효, HS256) 발급
 
-프론트엔드 Axios interceptor가 sessionStorage의 비밀번호를 자동 추가
+3. 이후 모든 /api/admin/* 요청:
+   Authorization: Bearer <JWT>
+
+4. 401 응답 시 프론트엔드가 토큰 삭제 + 페이지 리로드
 ```
+
+부트스트랩: `.env`의 `ADMIN_EMAIL`은 DB 미등록 상태에서도 항상 접근 허용 → 최초 설정 후 `admin_users`에 추가 이메일 등록 가능.
 
 ### 관리자 감시 로그 (admin_audit_logs)
 
@@ -507,7 +554,7 @@ X-Admin-Password: <ADMIN_PASSWORD>
 | 경로 | 컴포넌트 | 설명 |
 |------|----------|------|
 | `/` | `ChatPage.tsx` | 메인 채팅 인터페이스 |
-| `/admin` | `AdminPage.tsx` | 관리자 대시보드 (7개 탭) |
+| `/admin` | `AdminPage.tsx` | 관리자 대시보드 (8개 탭) |
 | `/admin/sessions/:id` | `AdminSessionPage.tsx` | 세션 상세 |
 
 **AdminPage 탭 구성**
@@ -517,10 +564,11 @@ X-Admin-Password: <ADMIN_PASSWORD>
 | 문서 관리 | PDF/Markdown 업로드, 승인/반려, 재시도 |
 | FAQ 관리 | FAQ 조회/생성/수정/삭제 |
 | 프롬프트 | 시스템 프롬프트 런타임 편집 |
-| 세션 | 사용자 세션 목록 조회 |
 | 로그/내보내기 | 상담 로그 필터 조회 + Excel 내보내기 |
-| 데이터 관리 | 커스텀 SQL 테이블 생성·편집·Excel 내보내기 |
+| 데이터 관리 | 커스텀 SQL 테이블 CRUD + 컬럼 이름/순서 변경 + CSV·Excel 가져오기·내보내기 |
 | DB 브라우저 | RDS 전체 테이블 탐색 + 암호화 필드 복호화 표시 |
+| 설정 | LLM 모델 선택 + 카테고리별 암호화 ON/OFF + 일괄 마이그레이션 |
+| 권한 관리 | 관리자 이메일 추가/제거 |
 
 ### 핵심 커스텀 훅 (useChat.ts)
 
@@ -552,40 +600,61 @@ await chatApi.streamMessage(
 ```typescript
 "chatConversations:v2"  // 대화 목록 (제목, 메시지, 세션ID)
 "chatCurrentConvId:v2"  // 현재 대화 ID
-"adminPassword"         // 관리자 비밀번호 (탭 세션 한정)
+"adminToken"            // 관리자 JWT (탭 세션 한정, 8시간 유효)
 ```
 
 ---
 
 ## 11. 관리자 대시보드 기능
 
+### 인증 흐름
+
+Google One Tap 로그인 → ID Token 전송 → 백엔드 검증 → JWT 발급 → sessionStorage 저장 → 이후 모든 API에 Bearer 자동 첨부. 401 수신 시 자동 로그아웃.
+
+### 설정 탭
+
+**LLM 모델 선택**
+- OpenAI API에서 사용 가능한 채팅 모델 목록 실시간 조회
+- 드롭다운에서 선택 후 "적용" → `.env` 즉시 갱신 + 설정 캐시 clear → 재시작 없이 반영
+
+**암호화 설정**
+
+```
+카테고리별 암호화 관리:
+  ┌──────────────────┬────────┬───────┬───────┐
+  │ 카테고리          │ 암호화  │ 암호화 │ 평문  │
+  │                  │ ON/OFF │  건수 │  건수 │
+  ├──────────────────┼────────┼───────┼───────┤
+  │ FAQ 내용          │ 토글   │   N건 │   M건 │
+  │ 프롬프트 내용     │ 토글   │   N건 │   M건 │
+  │ 문서 파일명·검토  │ 토글   │   N건 │   M건 │
+  │ 채팅 내용         │ 항상 ON│  (고정)│       │
+  └──────────────────┴────────┴───────┴───────┘
+
+토글: .env 갱신 → 이후 쓰기 시 반영
+마이그레이션 버튼: 기존 레코드 전체를 즉시 암호화↔복호화
+```
+
+### 권한 관리 탭
+
+관리자 이메일 목록 조회·추가·제거. `.env`의 `ADMIN_EMAIL`은 항상 유지(제거 불가).
+
 ### 데이터 관리 탭 (커스텀 SQL 테이블)
 
-비개발자도 브라우저에서 구조화 데이터를 관리할 수 있는 DBeaver 대체 기능:
+비개발자도 브라우저에서 구조화 데이터를 관리할 수 있는 기능:
 
 ```
-1. 테이블 생성 (이름 + 설명)
-        │
-        ▼
-   RDS에 cdata_{id} 테이블 CREATE 실행
-
-2. 컬럼 추가 (이름 + 타입: text / number / date)
-        │
-        ▼
-   ALTER TABLE cdata_{id} ADD COLUMN
-
-3. 데이터 입력 / 수정 / 삭제
-        │
-        ▼
-   INSERT INTO / UPDATE / DELETE FROM cdata_{id}
-
-4. Excel 내보내기
-        │
-        ▼
-   SELECT → openpyxl → .xlsx 다운로드
+1. 테이블 생성 → RDS에 cdata_{id} CREATE
+2. 컬럼 추가 (text/number/date) → ALTER TABLE ADD COLUMN
+3. 컬럼 이름 변경 → ALTER TABLE RENAME COLUMN
+4. 컬럼 순서 변경 (↑↓) → sort_order 재정렬
+5. 행 CRUD → INSERT / UPDATE / DELETE
+6. CSV / Excel 가져오기 → 헤더 자동 매핑 후 일괄 INSERT
+7. Excel 내보내기 (개별) → 선택 테이블 .xlsx
+8. Excel 내보내기 (전체) → 개요 시트 + 테이블별 시트로 구성
 ```
 
-- 컬럼 타입별 SQL 매핑: `text` → TEXT, `number` → NUMERIC, `date` → DATE
+- 컬럼 타입 → SQL 매핑: `text` → TEXT, `number` → NUMERIC, `date` → DATE
 - 생성된 테이블은 DB 브라우저 탭에서도 즉시 확인 가능
 
 ### DB 브라우저 탭
@@ -738,7 +807,43 @@ document-chatbot_practice/
 
 ---
 
-## 변경 이력
+## 14. 변경 이력
+
+### 2026-05-17
+
+**Google OAuth 2.0 관리자 인증 전환**
+- 비밀번호 로그인 제거 → Google One Tap 로그인으로 전환
+- 백엔드: `google-auth[requests]`로 ID Token 검증 → `PyJWT`로 8시간 JWT 발급
+- `admin_users` 테이블 추가 — 허용 이메일 목록 관리
+- 부트스트랩 관리자: `.env`의 `ADMIN_EMAIL`은 DB 미등록 상태에서도 항상 접근 가능
+- 프론트엔드: `adminPassword` → `adminToken` (sessionStorage), 401 수신 시 자동 로그아웃
+
+**런타임 LLM 모델 선택**
+- 설정 탭 신규 추가: OpenAI API에서 사용 가능한 채팅 모델 목록 실시간 조회
+- 드롭다운 선택 후 "적용" → `.env` 갱신 + `get_settings()` 캐시 clear → 재시작 없이 즉시 반영
+- 새 모델 출시 시 자동 목록 갱신 (instruct/fine-tuned 모델 필터 제외)
+
+**권한 관리 탭**
+- 관리자 이메일 추가/제거 UI
+- `ADMIN_EMAIL`(기본 관리자)은 제거 불가 처리
+
+**챗봇 답변 톤 개선**
+- 말투를 따뜻하고 친근한 상담사 스타일로 조정
+- 이모티콘: 자연스러울 때 1-2개 허용 (억지 사용 금지, 응답당 최대 2개)
+
+**카테고리별 암호화 관리**
+- 설정 탭에 암호화 섹션 추가
+- FAQ 내용 / 프롬프트 내용 / 문서 파일명의 암호화 ON/OFF 토글 (채팅은 항상 ON)
+- 카테고리별 암호화/평문 레코드 수 현황 표시
+- 일괄 마이그레이션 버튼: 기존 레코드를 암호화↔평문 전환
+- 새 데이터 저장 시 해당 설정 자동 적용 (토글 직후부터 반영)
+- `.env`에 `ENCRYPT_FAQ` / `ENCRYPT_PROMPT` / `ENCRYPT_DOCUMENT` 추가 (기본값 `true`)
+
+**데이터 관리 탭 기능 확장**
+- **컬럼 이름 변경**: 이름 클릭 → 인라인 편집 → Enter 저장 / Escape 취소 (ALTER TABLE RENAME COLUMN)
+- **컬럼 순서 변경**: ↑↓ 버튼으로 인접 컬럼과 위치 교환 (sort_order 재정렬)
+- **CSV / Excel 가져오기**: 헤더 행이 컬럼명과 일치하면 자동 매핑 → 일괄 INSERT (UTF-8 BOM 지원)
+- **전체 내보내기**: 모든 테이블을 개요 시트 + 테이블별 시트로 묶어 Excel 1개 다운로드
 
 ### 2026-05-16
 

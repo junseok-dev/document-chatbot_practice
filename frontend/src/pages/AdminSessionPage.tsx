@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { adminApi, getAdminPassword } from '../services/api';
+import { adminApi, getAdminToken } from '../services/api';
 import { AdminSessionDetail } from '../types';
 
 const SOURCE_BADGE: Record<string, { label: string; className: string }> = {
@@ -18,7 +18,7 @@ export default function AdminSessionPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!getAdminPassword()) {
+    if (!getAdminToken()) {
       navigate('/admin');
       return;
     }

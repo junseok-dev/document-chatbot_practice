@@ -14,6 +14,8 @@ import {
   CustomTableSummary,
   DbTableData,
   DbTableMeta,
+  EncryptionSettings,
+  ModelSettings,
   ProcessingLog,
   PromptConfig,
   PromptPayload,
@@ -27,17 +29,27 @@ const apiClient = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-const ADMIN_PWD_KEY = 'adminPassword';
-export const getAdminPassword = (): string => sessionStorage.getItem(ADMIN_PWD_KEY) ?? '';
-export const saveAdminPassword = (password: string) => sessionStorage.setItem(ADMIN_PWD_KEY, password);
-export const clearAdminPassword = () => sessionStorage.removeItem(ADMIN_PWD_KEY);
+const ADMIN_TOKEN_KEY = 'adminToken';
+export const getAdminToken = (): string => sessionStorage.getItem(ADMIN_TOKEN_KEY) ?? '';
+export const saveAdminToken = (token: string) => sessionStorage.setItem(ADMIN_TOKEN_KEY, token);
+export const clearAdminToken = () => sessionStorage.removeItem(ADMIN_TOKEN_KEY);
 
 const adminApiClient = axios.create({ baseURL: API_BASE_URL });
 adminApiClient.interceptors.request.use((config) => {
-  const pwd = getAdminPassword();
-  if (pwd) config.headers['X-Admin-Password'] = pwd;
+  const token = getAdminToken();
+  if (token) config.headers['Authorization'] = `Bearer ${token}`;
   return config;
 });
+adminApiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      clearAdminToken();
+      window.location.reload();
+    }
+    return Promise.reject(error);
+  },
+);
 
 export const chatApi = {
   sendMessage: async (sessionId: string, message: string): Promise<ChatResponse> => {
@@ -324,5 +336,77 @@ export const adminApi = {
     link.download = `${tableName}_${new Date().toISOString().slice(0, 10)}.xlsx`;
     link.click();
     window.URL.revokeObjectURL(url);
+  },
+
+  exportAllDataTables: async (): Promise<void> => {
+    const response = await adminApiClient.get('/admin/data-tables/export-all', { responseType: 'blob' });
+    const url = window.URL.createObjectURL(response.data);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `all_data_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+  },
+
+  importTableData: async (tableId: number, file: File): Promise<{ message: string; count: number }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await adminApiClient.post(`/admin/data-tables/${tableId}/import`, formData);
+    return response.data;
+  },
+
+  renameColumn: async (tableId: number, columnId: number, column_name: string): Promise<CustomColumnDef> => {
+    const response = await adminApiClient.put(`/admin/data-tables/${tableId}/columns/${columnId}`, { column_name });
+    return response.data;
+  },
+
+  reorderColumn: async (tableId: number, columnId: number, direction: 'up' | 'down'): Promise<{ message: string }> => {
+    const response = await adminApiClient.post(`/admin/data-tables/${tableId}/columns/${columnId}/reorder`, { direction });
+    return response.data;
+  },
+
+  verifyGoogleToken: async (credential: string): Promise<{ token: string; email: string }> => {
+    const response = await apiClient.post('/admin/auth/verify', { credential });
+    return response.data;
+  },
+
+  getPermissions: async (): Promise<{ emails: string[] }> => {
+    const response = await adminApiClient.get('/admin/permissions');
+    return response.data;
+  },
+
+  addPermission: async (email: string): Promise<{ message: string }> => {
+    const response = await adminApiClient.post('/admin/permissions', { email });
+    return response.data;
+  },
+
+  removePermission: async (email: string): Promise<{ message: string }> => {
+    const response = await adminApiClient.delete(`/admin/permissions/${encodeURIComponent(email)}`);
+    return response.data;
+  },
+
+  getModelSettings: async (): Promise<ModelSettings> => {
+    const response = await adminApiClient.get<ModelSettings>('/admin/settings/model');
+    return response.data;
+  },
+
+  setModel: async (model_name: string): Promise<{ message: string; model_name: string }> => {
+    const response = await adminApiClient.put('/admin/settings/model', { model_name });
+    return response.data;
+  },
+
+  getEncryptionSettings: async (): Promise<EncryptionSettings> => {
+    const response = await adminApiClient.get<EncryptionSettings>('/admin/settings/encryption');
+    return response.data;
+  },
+
+  toggleEncryption: async (category: string, encrypt_enabled: boolean): Promise<{ message: string }> => {
+    const response = await adminApiClient.put(`/admin/settings/encryption/${category}`, { encrypt_enabled });
+    return response.data;
+  },
+
+  migrateEncryption: async (category: string, direction: 'encrypt' | 'decrypt'): Promise<{ message: string; count: number }> => {
+    const response = await adminApiClient.post('/admin/settings/encryption/migrate', { category, direction });
+    return response.data;
   },
 };
