@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     aws_s3_prefix: str = "document-chatbot"
 
     channel_talk_url: str = ""
+    homepage_url: str = "https://encorecampus.ai/"
 
     default_counseling_prompt: str = Field(
         default=(

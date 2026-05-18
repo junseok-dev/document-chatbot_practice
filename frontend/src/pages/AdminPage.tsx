@@ -173,6 +173,7 @@ export default function AdminPage() {
   const [faqMdFile, setFaqMdFile] = useState<File | null>(null);
   const [faqMdCategory, setFaqMdCategory] = useState('');
   const [uploadBusy, setUploadBusy] = useState(false);
+  const [reindexBusy, setReindexBusy] = useState(false);
 
   const [faqForm, setFaqForm] = useState(EMPTY_FAQ);
   const [faqKeywords, setFaqKeywords] = useState('');
@@ -384,6 +385,19 @@ export default function AdminPage() {
   const reloadAndOpenDocument = async (documentId: number) => {
     await loadDashboard();
     await openDocument(documentId);
+  };
+
+  const handleReindex = async () => {
+    if (!window.confirm('승인된 모든 문서를 다시 청크·임베딩한 뒤 FAISS 인덱스를 재구성합니다. 수 초~수 분 소요될 수 있어요. 진행할까요?')) return;
+    setReindexBusy(true);
+    try {
+      const result = await adminApi.reindex();
+      setNotice(result.message || '인덱스 재구성 완료');
+    } catch {
+      setNotice('인덱스 재구성에 실패했습니다.');
+    } finally {
+      setReindexBusy(false);
+    }
   };
 
   const handlePdfUpload = async () => {
@@ -929,7 +943,7 @@ export default function AdminPage() {
             <div className="space-y-6">
               <section className="rounded-3xl bg-white p-6 shadow-sm">
                 <h2 className="text-lg font-semibold text-slate-900">업로드와 변환</h2>
-                <div className="mt-5 grid gap-4 lg:grid-cols-3">
+                <div className="mt-5 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
                   <div className="rounded-2xl border border-slate-200 p-4">
                     <h3 className="text-sm font-semibold text-slate-900">PDF → MD</h3>
                     <p className="mt-1 text-xs text-slate-500">변환 결과를 만든 뒤 검토 대기 상태로 저장합니다.</p>
@@ -950,6 +964,14 @@ export default function AdminPage() {
                     <input ref={faqMdInputRef} type="file" accept=".md" className="mt-4 block w-full text-sm" onChange={(e) => setFaqMdFile(e.target.files?.[0] ?? null)} />
                     <input value={faqMdCategory} onChange={(e) => setFaqMdCategory(e.target.value)} placeholder="FAQ 카테고리" className={`${INPUT_CLASS} mt-3`} />
                     <button onClick={handleFaqMdUpload} disabled={!faqMdFile || uploadBusy} className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">변환 생성</button>
+                  </div>
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4">
+                    <h3 className="text-sm font-semibold text-slate-900">FAISS 인덱스 재구성</h3>
+                    <p className="mt-1 text-xs text-slate-500">승인된 모든 문서를 다시 임베딩하고 검색 인덱스를 새로 만듭니다. 문서 본문이 바뀌었거나 검색 결과가 옛날 그대로일 때 실행하세요.</p>
+                    <p className="mt-2 text-[11px] text-amber-700">⚠ 수 초~수 분 소요. S3와도 자동 동기화됩니다.</p>
+                    <button onClick={handleReindex} disabled={reindexBusy} className="mt-4 w-full rounded-xl bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50">
+                      {reindexBusy ? '재구성 중...' : '인덱스 재구성'}
+                    </button>
                   </div>
                 </div>
               </section>

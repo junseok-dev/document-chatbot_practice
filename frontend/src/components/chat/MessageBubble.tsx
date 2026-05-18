@@ -87,6 +87,17 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
                       components={{
                         p: ({ children }) => <span>{children}</span>,
                         strong: ({ children }) => <strong className="font-semibold text-gray-950">{children}</strong>,
+                        a: ({ href, children }) => (
+                          <a
+                            href={href}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-medium text-brand-600 underline decoration-brand-300 underline-offset-2 hover:text-brand-700 hover:decoration-brand-500"
+                          >
+                            {children}
+                            <span className="ml-0.5 text-[10px] align-top">↗</span>
+                          </a>
+                        ),
                       }}
                     >
                       {bubble}
