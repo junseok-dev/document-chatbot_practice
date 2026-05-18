@@ -19,6 +19,7 @@ langchain-openai
 langchain-chroma
 langchain-text-splitters
 langchain-community
+langgraph
 ragas
 boto3
 openpyxl

@@ -16,6 +16,7 @@ class RetrievalPlan:
 class SearchResult:
     context: str
     chunks: list[str]
+    top_score: float = 0.0
 
 
 COURSE_FILES = ["course_ai_orchestration", "course_ml_engineer", "course_mlops"]
@@ -98,7 +99,7 @@ def search_documents(query: str, top_k: int = 4) -> SearchResult:
             search_query = " ".join(part for part in expansion_parts if part)
             plan.top_k = max(plan.top_k, min(faq.get("top_k", 6), 8))
 
-    docs = get_rag_service().search_documents(
+    docs, top_score = get_rag_service().search_documents_scored(
         plan.query or search_query,
         top_k=plan.top_k or top_k,
         strategy=plan.strategy,
@@ -108,4 +109,5 @@ def search_documents(query: str, top_k: int = 4) -> SearchResult:
     return SearchResult(
         context="\n\n---\n\n".join(chunks),
         chunks=chunks,
+        top_score=top_score,
     )

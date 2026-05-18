@@ -197,9 +197,9 @@ class RAGService:
         fused = sorted(scores.items(), key=lambda item: item[1], reverse=True)
         return [documents[key] for key, _ in fused[: max(top_k * 4, top_k)]]
 
-    def _rerank_documents(self, query: str, docs: list[Document], top_k: int) -> list[Document]:
+    def _rerank_documents(self, query: str, docs: list[Document], top_k: int) -> tuple[list[Document], float]:
         if not docs:
-            return []
+            return [], 0.0
         query_tokens = set(_tokenize(query))
         compact_query = _compact_text(query)
         query_embedding = self._embeddings.embed_query(query) if self._embeddings else None
@@ -225,8 +225,9 @@ class RAGService:
             scored_docs.append((score, doc))
 
         scored_docs.sort(key=lambda item: item[0], reverse=True)
+        top_score = scored_docs[0][0] if scored_docs else 0.0
         reranked = [doc for _, doc in scored_docs]
-        return self._unique_documents(reranked, top_k)
+        return self._unique_documents(reranked, top_k), top_score
 
     def index_all(self, db: Session | None = None) -> None:
         if not self._embeddings:
@@ -301,6 +302,18 @@ class RAGService:
                 )
         db.commit()
 
+    def _get_candidates(self, query: str, top_k: int, strategy: str, file_filter: set[str]) -> list[Document]:
+        if strategy == "semantic":
+            return self._vector_search(query, top_k, file_filter)
+        if strategy == "keyword":
+            return self._keyword_search(query, top_k, file_filter)
+        if strategy == "mmr":
+            return self._mmr_search(query, top_k, file_filter)
+        vector_docs = self._vector_search(query, top_k, file_filter)
+        keyword_docs = self._keyword_search(query, top_k, file_filter)
+        mmr_docs = self._mmr_search(query, top_k, file_filter)
+        return self._fuse_ranked_lists([keyword_docs, vector_docs, mmr_docs], top_k)
+
     def search_documents(
         self,
         query: str,
@@ -310,19 +323,20 @@ class RAGService:
     ) -> list[Document]:
         if self._vectorstore is None and not self._keyword_index:
             return []
+        candidates = self._get_candidates(query, top_k, strategy, set(files or []))
+        docs, _ = self._rerank_documents(query, candidates, top_k)
+        return docs
 
-        file_filter = set(files or [])
-        if strategy == "semantic":
-            candidates = self._vector_search(query, top_k, file_filter)
-        elif strategy == "keyword":
-            candidates = self._keyword_search(query, top_k, file_filter)
-        elif strategy == "mmr":
-            candidates = self._mmr_search(query, top_k, file_filter)
-        else:
-            vector_docs = self._vector_search(query, top_k, file_filter)
-            keyword_docs = self._keyword_search(query, top_k, file_filter)
-            mmr_docs = self._mmr_search(query, top_k, file_filter)
-            candidates = self._fuse_ranked_lists([keyword_docs, vector_docs, mmr_docs], top_k)
+    def search_documents_scored(
+        self,
+        query: str,
+        top_k: int = 4,
+        strategy: str = "hybrid",
+        files: list[str] | None = None,
+    ) -> tuple[list[Document], float]:
+        if self._vectorstore is None and not self._keyword_index:
+            return [], 0.0
+        candidates = self._get_candidates(query, top_k, strategy, set(files or []))
         return self._rerank_documents(query, candidates, top_k)
 
     def search(self, query: str, top_k: int = 4, strategy: str = "hybrid", files: list[str] | None = None) -> str:

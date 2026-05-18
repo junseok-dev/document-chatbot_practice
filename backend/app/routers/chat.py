@@ -10,10 +10,9 @@ from app.db.crud import get_or_create_session, save_message
 from app.db.database import get_db
 from app.db.models import CancelRequest, ChatLog
 from app.models.chat import ChatRequest, ChatResponse, SuggestedQuestionsResponse
-from app.services.document_service import search_documents
 from app.services.faq_service import get_suggested_questions, is_guide_query, match_button_faq, match_faq_general, search_faq
+from app.services.graph_service import run_rag_graph
 from app.services.guardrail_service import check as guardrail_check
-from app.services.openai_service import get_ai_response, get_ai_response_stream
 from app.services.prompt_service import get_prompt_value
 from app.services.response_formatter import format_chat_response
 from app.utils.crypto import maybe_encrypt
@@ -207,12 +206,9 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
                 )
                 source = "faq"
         else:
-            result = search_documents(request.message)
-            retrieval_chunks = result.chunks
             history = [{"role": h.role, "content": h.content} for h in request.history]
             try:
-                answer, llm_cost = await get_ai_response(request.message, result.context, history)
-                source = "document" if result.context else "ai"
+                answer, llm_cost, source, retrieval_chunks = await run_rag_graph(request.message, history)
             except Exception as exc:
                 answer = get_prompt_value("fallback_prompt")
                 source = "fallback"
@@ -298,15 +294,18 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                 async for chunk in _stream_static(get_prompt_value("handoff_prompt")):
                     yield chunk
             else:
-                result = search_documents(request.message)
-                retrieval_chunks = result.chunks
                 history = [{"role": h.role, "content": h.content} for h in request.history]
                 channel_talk_url = get_settings().channel_talk_url if "채널톡" in request.message else None
                 try:
-                    async for token in get_ai_response_stream(request.message, result.context, history, channel_talk_url):
-                        full_answer += token
-                        yield _sse({"token": token})
-                    source = "document" if result.context else "ai"
+                    answer, _, source, retrieval_chunks = await run_rag_graph(request.message, history, channel_talk_url)
+                    bubbles = [b for b in answer.split("\n\n") if b.strip()]
+                    for idx, bubble in enumerate(bubbles):
+                        if idx > 0:
+                            full_answer += "\n\n"
+                            yield _sse({"token": "\n\n"})
+                            await asyncio.sleep(1.0)
+                        full_answer += bubble
+                        yield _sse({"token": bubble})
                 except Exception as exc:
                     fallback = get_prompt_value("fallback_prompt")
                     source = "fallback"
@@ -368,14 +367,17 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                     async for chunk in _stream_static(static_text, max_bubbles=10):
                         yield chunk
                 else:
-                    result = search_documents(request.message)
-                    retrieval_chunks = result.chunks
                     history = [{"role": h.role, "content": h.content} for h in request.history]
                     try:
-                        async for token in get_ai_response_stream(request.message, result.context, history):
-                            full_answer += token
-                            yield _sse({"token": token})
-                        source = "document" if result.context else "ai"
+                        answer, _, source, retrieval_chunks = await run_rag_graph(request.message, history)
+                        bubbles = [b for b in answer.split("\n\n") if b.strip()]
+                        for idx, bubble in enumerate(bubbles):
+                            if idx > 0:
+                                full_answer += "\n\n"
+                                yield _sse({"token": "\n\n"})
+                                await asyncio.sleep(1.0)
+                            full_answer += bubble
+                            yield _sse({"token": bubble})
                     except Exception as exc:
                         fallback = get_prompt_value("fallback_prompt")
                         source = "fallback"
