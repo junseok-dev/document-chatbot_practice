@@ -44,7 +44,7 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
     return (
       <div className="flex justify-end items-end gap-1.5 mb-2 px-3 sm:px-4">
         <span className="text-[10px] text-gray-400 mb-0.5 shrink-0">{timeString}</span>
-        <div className="max-w-[85%] sm:max-w-[78%] rounded-2xl rounded-br-sm bg-brand-500 px-3.5 py-2.5 sm:px-4 sm:py-3 text-[14.5px] sm:text-[15px] leading-[1.6] sm:leading-[1.65] text-white shadow-sm">
+        <div className="max-w-[85%] sm:max-w-[78%] rounded-2xl rounded-br-sm bg-brand-500 px-3.5 py-2.5 sm:px-4 sm:py-3 text-[14.5px] sm:text-[15px] leading-[1.7] sm:leading-[1.75] text-white shadow-sm">
           <div className="whitespace-pre-wrap break-keep">{message.content}</div>
         </div>
       </div>
@@ -64,7 +64,7 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
         <div className="flex items-end gap-1.5">
           <div className="flex flex-col items-start gap-1.5">
             {isStreaming && assistantBubbles.length === 0 ? (
-              <div className="w-fit max-w-full rounded-2xl rounded-tl-sm bg-white px-3.5 py-2.5 sm:px-4 sm:py-3 text-[14.5px] sm:text-[15px] leading-[1.6] sm:leading-[1.65] text-gray-800 shadow-sm border border-gray-100">
+              <div className="w-fit max-w-full rounded-2xl rounded-tl-sm bg-white px-3.5 py-2.5 sm:px-4 sm:py-3 text-[14.5px] sm:text-[15px] leading-[1.7] sm:leading-[1.75] text-gray-800 shadow-sm border border-gray-100">
                 <div className="flex items-center gap-2">
                   <span className="break-keep">{THINKING_STATUSES[statusIndex]}</span>
                   <span className="flex gap-0.5 pt-1">
@@ -78,7 +78,7 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
               assistantBubbles.map((bubble, index) => (
                 <div
                   key={index}
-                  className={`w-fit max-w-full rounded-2xl bg-white px-3.5 py-2.5 sm:px-4 sm:py-3 text-[14.5px] sm:text-[15px] leading-[1.6] sm:leading-[1.65] text-gray-800 shadow-sm border border-gray-100 ${
+                  className={`w-fit max-w-full rounded-2xl bg-white px-3.5 py-2.5 sm:px-4 sm:py-3 text-[14.5px] sm:text-[15px] leading-[1.7] sm:leading-[1.75] text-gray-800 shadow-sm border border-gray-100 ${
                     index === 0 ? 'rounded-tl-sm' : ''
                   }`}
                 >
@@ -87,6 +87,15 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
                       components={{
                         p: ({ children }) => <span>{children}</span>,
                         strong: ({ children }) => <strong className="font-semibold text-gray-950">{children}</strong>,
+                        ul: ({ children }) => (
+                          <ul className="mt-1.5 space-y-2 list-none">{children}</ul>
+                        ),
+                        li: ({ children }) => (
+                          <li className="flex gap-2">
+                            <span className="mt-0.5 shrink-0 text-gray-500">•</span>
+                            <span className="min-w-0 flex-1">{children}</span>
+                          </li>
+                        ),
                         a: ({ href, children }) => (
                           <a
                             href={href}

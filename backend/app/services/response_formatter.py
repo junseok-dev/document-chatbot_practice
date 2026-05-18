@@ -12,7 +12,9 @@ def _clean_text(text: str) -> str:
     cleaned = cleaned.replace("```", "")
     cleaned = re.sub(r"(?m)^[ \t]{0,3}#{1,6}[ \t]*", "", cleaned)
     cleaned = re.sub(r"(?m)^[ \t]{0,3}>[ \t]*", "", cleaned)
-    cleaned = re.sub(r"(?m)^[ \t]*[-*•][ \t]+", "• ", cleaned)
+    cleaned = re.sub(r"(?m)^[ \t]*[-*•][ \t]+", "- ", cleaned)
+    # 연속된 목록 항목 사이의 빈 줄을 제거 → 한 ul로 묶이게 함
+    cleaned = re.sub(r"(?m)(^- [^\n]+)\n+(?=- )", r"\1\n", cleaned)
     cleaned = re.sub(r"\s*[–—]\s*", ". ", cleaned)
     cleaned = re.sub(r"\s+-\s+", ". ", cleaned)
     cleaned = re.sub(r"[ \t]+", " ", cleaned)
@@ -25,6 +27,9 @@ def _clean_text(text: str) -> str:
         cleaned,
     )
     cleaned = re.sub(r"^\s*정보\s*정리\s*(해\s*드릴게요)?[.:]?\s*", "", cleaned)
+    # 문장 끝(. ! ? ~) 뒤에 공백+다음 문장이 오면 줄바꿈으로 분리해 가독성 보강.
+    # URL 내부 마침표(예: encorecampus.ai/)는 공백 없이 이어지므로 영향 없음.
+    cleaned = re.sub(r"([.!?~]) +(?=[가-힣A-Za-z(\[•\-*])", r"\1\n", cleaned)
     return cleaned.strip()
 
 
