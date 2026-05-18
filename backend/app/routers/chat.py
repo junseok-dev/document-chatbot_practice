@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
@@ -24,11 +25,33 @@ def _normalize_intent_text(message: str) -> str:
     return "".join((message or "").lower().split())
 
 
-def _with_handoff_link(text: str) -> str:
+_CHANNEL_MARKDOWN_LINK = re.compile(
+    r"\s*\[[^\]]*?(?:채널톡|상담\s*매니저\s*연결)[^\]]*?\]\([^)]+\)\s*"
+)
+
+
+def _sanitize_and_promote(answer: str, current_source: str) -> tuple[str, str]:
+    """LLM 본문에서 채널톡 URL/마크다운 링크를 제거하고, 채널톡 안내가 있으면 source를 handoff로 승격."""
+    cleaned = answer or ""
+    detected = False
+
+    if _CHANNEL_MARKDOWN_LINK.search(cleaned):
+        cleaned = _CHANNEL_MARKDOWN_LINK.sub(" ", cleaned)
+        detected = True
+
     url = (get_settings().channel_talk_url or "").strip()
-    if not url or url in (text or ""):
-        return text
-    return f"{text}\n\n[채널톡 상담 매니저 연결하기]({url})"
+    if url and url in cleaned:
+        cleaned = cleaned.replace(url, "")
+        detected = True
+
+    if "채널톡" in cleaned:
+        detected = True
+
+    cleaned = re.sub(r"[ \t]+", " ", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+
+    new_source = "handoff" if detected else current_source
+    return cleaned, new_source
 
 
 GREETING_ANSWER = (
@@ -169,13 +192,13 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         answer = blocked
         source = "guardrail"
     elif is_cancel_request(request.message):
-        answer = _with_handoff_link(get_prompt_value("cancel_prompt"))
+        answer = get_prompt_value("cancel_prompt")
         source = "handoff"
         processing_status = "handoff"
         db.add(CancelRequest(session_id=request.session_id, message=request.message, status="requested"))
         db.commit()
     elif is_handoff_request(request.message):
-        answer = _with_handoff_link(get_prompt_value("handoff_prompt"))
+        answer = get_prompt_value("handoff_prompt")
         source = "handoff"
         processing_status = "handoff"
     elif is_greeting(request.message):
@@ -219,6 +242,9 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
                 answer, llm_cost, source, retrieval_chunks = await run_rag_graph(
                     request.message, history, channel_talk_url
                 )
+                answer, source = _sanitize_and_promote(answer, source)
+                if source == "handoff":
+                    processing_status = "handoff"
             except Exception as exc:
                 answer = get_prompt_value("fallback_prompt")
                 source = "fallback"
@@ -290,24 +316,35 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                 yield chunk
 
         elif has_history:
-            # 대화 중: 취소/상담원 연결만 체크하고 나머지는 LLM이 맥락 보고 답변
+            # 대화 중: 취소/상담원 연결 + FAQ 매칭 우선, 그 외엔 LLM이 맥락 보고 답변
             if is_cancel_request(request.message):
                 source = "handoff"
                 processing_status = "handoff"
                 db.add(CancelRequest(session_id=request.session_id, message=request.message, status="requested"))
                 db.commit()
-                async for chunk in _stream_static(_with_handoff_link(get_prompt_value("cancel_prompt"))):
+                async for chunk in _stream_static(get_prompt_value("cancel_prompt")):
                     yield chunk
             elif is_handoff_request(request.message):
                 source = "handoff"
                 processing_status = "handoff"
-                async for chunk in _stream_static(_with_handoff_link(get_prompt_value("handoff_prompt"))):
+                async for chunk in _stream_static(get_prompt_value("handoff_prompt")):
+                    yield chunk
+            elif btn := match_button_faq(request.message):
+                source = "faq"
+                async for chunk in _stream_static(btn, max_bubbles=10):
+                    yield chunk
+            elif gen := match_faq_general(request.message):
+                source = "faq"
+                async for chunk in _stream_static(gen, max_bubbles=10):
                     yield chunk
             else:
                 history = [{"role": h.role, "content": h.content} for h in request.history]
                 channel_talk_url = (get_settings().channel_talk_url or "").strip() or None
                 try:
                     answer, _, source, retrieval_chunks = await run_rag_graph(request.message, history, channel_talk_url)
+                    answer, source = _sanitize_and_promote(answer, source)
+                    if source == "handoff":
+                        processing_status = "handoff"
                     bubbles = [b for b in answer.split("\n\n") if b.strip()]
                     for idx, bubble in enumerate(bubbles):
                         if idx > 0:
@@ -331,12 +368,12 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                 processing_status = "handoff"
                 db.add(CancelRequest(session_id=request.session_id, message=request.message, status="requested"))
                 db.commit()
-                async for chunk in _stream_static(_with_handoff_link(get_prompt_value("cancel_prompt"))):
+                async for chunk in _stream_static(get_prompt_value("cancel_prompt")):
                     yield chunk
             elif is_handoff_request(request.message):
                 source = "handoff"
                 processing_status = "handoff"
-                async for chunk in _stream_static(_with_handoff_link(get_prompt_value("handoff_prompt"))):
+                async for chunk in _stream_static(get_prompt_value("handoff_prompt")):
                     yield chunk
             elif is_greeting(request.message):
                 source = "faq"
@@ -383,6 +420,9 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                         answer, _, source, retrieval_chunks = await run_rag_graph(
                             request.message, history, channel_talk_url
                         )
+                        answer, source = _sanitize_and_promote(answer, source)
+                        if source == "handoff":
+                            processing_status = "handoff"
                         bubbles = [b for b in answer.split("\n\n") if b.strip()]
                         for idx, bubble in enumerate(bubbles):
                             if idx > 0:

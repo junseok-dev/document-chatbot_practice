@@ -248,7 +248,7 @@ def search_faq(query: str) -> str | None:
     best_score, faq = matched
     if not faq.get("direct_answer", False):
         return None
-    if best_score < 7.0:
+    if best_score < 6.0:
         return None
     return faq.get("answer")
 
@@ -264,7 +264,7 @@ def match_button_faq(query: str) -> str | None:
     return None
 
 
-def match_faq_general(query: str, threshold: float = 7.5) -> str | None:
+def match_faq_general(query: str, threshold: float = 6.0) -> str | None:
     """일반 대화에서 direct_answer FAQ와 충분히 매칭될 때 답변 반환."""
     matched = match_faq(query)
     if not matched:

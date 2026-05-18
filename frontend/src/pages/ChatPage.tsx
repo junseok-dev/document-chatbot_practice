@@ -24,7 +24,7 @@ const ChatPage: React.FC = () => {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-gray-50">
       <header className="relative z-10 shrink-0 border-b border-gray-200 bg-white shadow-sm">
-        <div className="mx-auto flex h-16 w-full max-w-4xl items-center justify-between px-4">
+        <div className="mx-auto flex h-16 w-full max-w-sm items-center justify-between px-4">
           <div className="flex items-center gap-4">
             <button
               onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}
@@ -60,7 +60,7 @@ const ChatPage: React.FC = () => {
       </header>
 
       <main className="relative flex-1 overflow-hidden">
-        <div className="relative z-10 mx-auto h-full max-w-4xl border-x border-gray-100 bg-white shadow-2xl">
+        <div className="relative z-10 mx-auto h-full max-w-sm border-x border-gray-100 bg-white shadow-2xl">
           <ChatWindow
             messages={messages}
             isLoading={isLoading}
@@ -68,6 +68,7 @@ const ChatPage: React.FC = () => {
             suggestedQuestions={suggestedQuestions}
             sendMessage={sendMessage}
             stopGenerating={stopGenerating}
+            convId={convId}
           />
         </div>
       </main>
