@@ -771,7 +771,7 @@ export default function AdminPage() {
     await loadDbTableData(tableName, 1);
   };
 
-  const openEditDbRow = (row: Record<string, unknown>, rowId: number) => {
+  const openEditDbRow = (row: Record<string, unknown>) => {
     const protectedCols = new Set(dbTableData?.protected_columns ?? []);
     const initial: Record<string, string> = {};
     for (const col of dbTableData?.columns ?? []) {
@@ -785,7 +785,7 @@ export default function AdminPage() {
   // editingDbRow가 바뀌면 폼 초기화
   useEffect(() => {
     if (editingDbRow) {
-      openEditDbRow(editingDbRow.row, editingDbRow.rowId);
+      openEditDbRow(editingDbRow.row);
     } else {
       setEditingDbValues({});
     }
