@@ -57,7 +57,7 @@ def _sanitize_and_promote(answer: str, current_source: str) -> tuple[str, str]:
 GREETING_ANSWER = (
     "안녕하세요!\n\n"
     "플레이데이터 상담봇입니다. 반갑습니다.\n\n"
-    "과정, 수강 조건, 비용, 취업 지원처럼 궁금한 내용을 편하게 물어봐 주세요."
+    "**과정**, **수강 조건**, **비용**, **취업 지원**처럼 궁금한 내용을 편하게 물어봐 주세요."
 )
 
 

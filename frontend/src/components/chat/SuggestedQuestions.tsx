@@ -43,12 +43,14 @@ const SuggestedQuestions: React.FC<Props> = ({ questions, onSelect, disabled }) 
   const bottomRow = BOTTOM_ROW_IDS.map((id) => questions.find((q) => q.id === id)).filter(Boolean) as SuggestedQuestion[];
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {topRow.map((q) => renderButton(q, onSelect, disabled))}
-      </div>
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {bottomRow.map((q) => renderButton(q, onSelect, disabled))}
+    <div className="overflow-x-auto pb-1">
+      <div className="flex w-max flex-col gap-1.5">
+        <div className="flex gap-2">
+          {topRow.map((q) => renderButton(q, onSelect, disabled))}
+        </div>
+        <div className="flex gap-2">
+          {bottomRow.map((q) => renderButton(q, onSelect, disabled))}
+        </div>
       </div>
     </div>
   );
