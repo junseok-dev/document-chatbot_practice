@@ -56,14 +56,19 @@ const HistoryDropdown: React.FC<Props> = ({ open, onClose, onSelect, currentConv
   useEffect(() => {
     if (open) {
       refresh();
-      setResults(search(''));
+      setResults([]);
       setKeyword('');
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [open]);
 
   useEffect(() => {
-    setResults(search(keyword));
+    const trimmed = keyword.trim();
+    if (!trimmed) {
+      setResults([]);
+      return;
+    }
+    setResults(search(trimmed));
   }, [keyword]);
 
   // outside-click: 패널과 토글 버튼 둘 다 제외
@@ -115,7 +120,7 @@ const HistoryDropdown: React.FC<Props> = ({ open, onClose, onSelect, currentConv
         {results.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-8 text-gray-400">
             <MessageSquare size={24} strokeWidth={1.5} />
-            <p className="text-xs">{keyword ? '검색 결과가 없습니다' : '대화 기록이 없습니다'}</p>
+            <p className="text-xs">{keyword.trim() ? '검색 결과가 없습니다' : '키워드를 입력해 대화를 검색하세요'}</p>
           </div>
         ) : (
           <ul className="pb-2">
