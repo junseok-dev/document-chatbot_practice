@@ -1,4 +1,4 @@
-# 엔코어캠퍼스 AI 상담 챗봇
+# 엔코어캠퍼스 AI 상담 챗봇.
 
 > 교육 과정 안내 및 상담을 위한 문서 기반 RAG 챗봇 시스템
 
@@ -46,43 +46,43 @@
 
 ### 백엔드
 
-| 분류 | 기술 |
-|------|------|
-| 웹 프레임워크 | FastAPI + Uvicorn |
-| ORM | SQLAlchemy |
-| 데이터베이스 | AWS Aurora RDS (PostgreSQL 호환) |
-| LLM | OpenAI GPT (런타임 모델 선택 가능, 기본 `gpt-5-mini`) |
-| 임베딩 | OpenAI `text-embedding-3-small` (1536차원) |
-| 벡터 DB | FAISS (로컬 인덱스, S3 동기화) |
-| LangChain | `langchain-openai`, `langchain-community`, `langchain-text-splitters` |
-| PDF 처리 | `opendataloader-pdf` |
-| 오브젝트 스토리지 | AWS S3 (`boto3`) |
-| 암호화 | `cryptography` (Fernet 대칭 암호화) |
-| 인증 | `google-auth[requests]` + `PyJWT` (Google OAuth 2.0 + JWT) |
-| 엑셀 내보내기 | `openpyxl` |
+| 분류              | 기술                                                                        |
+| ----------------- | --------------------------------------------------------------------------- |
+| 웹 프레임워크     | FastAPI + Uvicorn                                                           |
+| ORM               | SQLAlchemy                                                                  |
+| 데이터베이스      | AWS Aurora RDS (PostgreSQL 호환)                                            |
+| LLM               | OpenAI GPT (런타임 모델 선택 가능, 기본 `gpt-5-mini`)                     |
+| 임베딩            | OpenAI `text-embedding-3-small` (1536차원)                                |
+| 벡터 DB           | FAISS (로컬 인덱스, S3 동기화)                                              |
+| LangChain         | `langchain-openai`, `langchain-community`, `langchain-text-splitters` |
+| PDF 처리          | `opendataloader-pdf`                                                      |
+| 오브젝트 스토리지 | AWS S3 (`boto3`)                                                          |
+| 암호화            | `cryptography` (Fernet 대칭 암호화)                                       |
+| 인증              | `google-auth[requests]` + `PyJWT` (Google OAuth 2.0 + JWT)              |
+| 엑셀 내보내기     | `openpyxl`                                                                |
 
 ### 프론트엔드
 
-| 분류 | 기술 |
-|------|------|
-| 프레임워크 | React 18 + TypeScript |
-| 번들러 | Vite |
-| UI | Tailwind CSS |
-| HTTP | Axios |
-| 라우팅 | React Router v6 |
-| 마크다운 렌더링 | react-markdown |
-| 아이콘 | lucide-react |
-| OAuth | `@react-oauth/google` (Google One Tap 로그인) |
+| 분류            | 기술                                            |
+| --------------- | ----------------------------------------------- |
+| 프레임워크      | React 18 + TypeScript                           |
+| 번들러          | Vite                                            |
+| UI              | Tailwind CSS                                    |
+| HTTP            | Axios                                           |
+| 라우팅          | React Router v6                                 |
+| 마크다운 렌더링 | react-markdown                                  |
+| 아이콘          | lucide-react                                    |
+| OAuth           | `@react-oauth/google` (Google One Tap 로그인) |
 
 ### 인프라 / DevOps
 
-| 분류 | 기술 |
-|------|------|
-| 서버 | AWS EC2 |
-| 데이터베이스 | AWS Aurora RDS (PostgreSQL) |
-| 오브젝트 스토리지 | AWS S3 |
-| CI/CD | GitHub Actions (self-hosted runner on EC2) |
-| 프로세스 관리 | systemd (`chatbot.service`) |
+| 분류              | 기술                                       |
+| ----------------- | ------------------------------------------ |
+| 서버              | AWS EC2                                    |
+| 데이터베이스      | AWS Aurora RDS (PostgreSQL)                |
+| 오브젝트 스토리지 | AWS S3                                     |
+| CI/CD             | GitHub Actions (self-hosted runner on EC2) |
+| 프로세스 관리     | systemd (`chatbot.service`)              |
 
 ---
 
@@ -307,22 +307,22 @@ POST /api/chat/stream
 
 ### 테이블 목록
 
-| 테이블 | 설명 | 암호화 적용 필드 |
-|--------|------|----------------|
-| `chat_sessions` | 사용자 채팅 세션 | `encrypted_user_name` |
-| `chat_messages` | 개별 메시지 | `content` |
-| `chat_logs` | 상담 로그 (API 비용 포함) | `question`, `answer`, `retrieval_chunks` |
-| `documents` | 업로드 문서 메타 | `original_filename`, `error_message` (설정에 따라) |
-| `chunks` | 문서 청크 | `content` |
-| `faqs` | FAQ 항목 | 암호화 설정에 따라 선택적 적용 |
-| `prompt_configs` | 시스템 프롬프트 관리 | 암호화 설정에 따라 선택적 적용 |
-| `admin_users` | 관리자 권한 이메일 목록 | — |
-| `admin_audit_logs` | 관리자 작업 감시 로그 | — |
-| `cancel_requests` | 취소/환불 요청 기록 | — |
-| `processing_logs` | 문서 처리 상태 로그 | — |
-| `custom_tables` | 데이터 관리 탭: 사용자 정의 테이블 메타데이터 | — |
-| `custom_columns` | 데이터 관리 탭: 컬럼 정의 (text/number/date) | — |
-| `cdata_{id}` | 데이터 관리 탭: 실제 데이터 저장 테이블 (동적 생성) | — |
+| 테이블               | 설명                                                | 암호화 적용 필드                                       |
+| -------------------- | --------------------------------------------------- | ------------------------------------------------------ |
+| `chat_sessions`    | 사용자 채팅 세션                                    | `encrypted_user_name`                                |
+| `chat_messages`    | 개별 메시지                                         | `content`                                            |
+| `chat_logs`        | 상담 로그 (API 비용 포함)                           | `question`, `answer`, `retrieval_chunks`         |
+| `documents`        | 업로드 문서 메타                                    | `original_filename`, `error_message` (설정에 따라) |
+| `chunks`           | 문서 청크                                           | `content`                                            |
+| `faqs`             | FAQ 항목                                            | 암호화 설정에 따라 선택적 적용                         |
+| `prompt_configs`   | 시스템 프롬프트 관리                                | 암호화 설정에 따라 선택적 적용                         |
+| `admin_users`      | 관리자 권한 이메일 목록                             | —                                                     |
+| `admin_audit_logs` | 관리자 작업 감시 로그                               | —                                                     |
+| `cancel_requests`  | 취소/환불 요청 기록                                 | —                                                     |
+| `processing_logs`  | 문서 처리 상태 로그                                 | —                                                     |
+| `custom_tables`    | 데이터 관리 탭: 사용자 정의 테이블 메타데이터       | —                                                     |
+| `custom_columns`   | 데이터 관리 탭: 컬럼 정의 (text/number/date)        | —                                                     |
+| `cdata_{id}`       | 데이터 관리 탭: 실제 데이터 저장 테이블 (동적 생성) | —                                                     |
 
 ### 암호화 방식
 
@@ -350,108 +350,108 @@ python scripts/migrate_sqlite_to_rds.py
 
 ### 채팅 API
 
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| `POST` | `/api/chat` | 동기 채팅 (단일 응답) |
-| `POST` | `/api/chat/stream` | 스트리밍 채팅 (SSE) |
-| `GET` | `/api/chat/suggested` | 추천 질문 목록 |
+| 메서드   | 경로                    | 설명                  |
+| -------- | ----------------------- | --------------------- |
+| `POST` | `/api/chat`           | 동기 채팅 (단일 응답) |
+| `POST` | `/api/chat/stream`    | 스트리밍 채팅 (SSE)   |
+| `GET`  | `/api/chat/suggested` | 추천 질문 목록        |
 
 ### 관리자 API (`Authorization: Bearer <JWT>` 헤더 필요)
 
 **인증**
 
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
+| 메서드   | 경로                       | 설명                                          |
+| -------- | -------------------------- | --------------------------------------------- |
 | `POST` | `/api/admin/auth/verify` | Google ID Token 검증 → JWT 발급 (8시간 유효) |
 
 **권한 관리**
 
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| `GET` | `/api/admin/permissions` | 등록된 관리자 이메일 목록 |
-| `POST` | `/api/admin/permissions` | 이메일 추가 |
-| `DELETE` | `/api/admin/permissions/{email}` | 이메일 제거 |
+| 메서드     | 경로                               | 설명                      |
+| ---------- | ---------------------------------- | ------------------------- |
+| `GET`    | `/api/admin/permissions`         | 등록된 관리자 이메일 목록 |
+| `POST`   | `/api/admin/permissions`         | 이메일 추가               |
+| `DELETE` | `/api/admin/permissions/{email}` | 이메일 제거               |
 
 **문서 관리**
 
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| `POST` | `/api/admin/upload-pdf` | PDF 업로드 → Markdown 변환 |
-| `POST` | `/api/admin/upload-md` | Markdown 직접 업로드 |
-| `POST` | `/api/admin/upload-faq-md` | FAQ Markdown 업로드 |
-| `POST` | `/api/admin/import-catalog` | 카탈로그 일괄 가져오기 |
-| `GET` | `/api/admin/documents` | 문서 목록 |
-| `GET` | `/api/admin/documents/{id}` | 문서 상세 |
-| `POST` | `/api/admin/documents/{id}/approve` | 문서 승인 → 인덱싱 대상 포함 |
-| `POST` | `/api/admin/documents/{id}/reject` | 문서 반려 |
-| `POST` | `/api/admin/documents/{id}/restore` | 문서 복원 |
-| `DELETE` | `/api/admin/documents/{id}` | 문서 삭제 |
-| `POST` | `/api/admin/documents/{id}/retry` | 처리 재시도 |
-| `POST` | `/api/admin/reindex` | FAISS 인덱스 전체 재구성 + S3 동기화 |
+| 메서드     | 경로                                  | 설명                                 |
+| ---------- | ------------------------------------- | ------------------------------------ |
+| `POST`   | `/api/admin/upload-pdf`             | PDF 업로드 → Markdown 변환          |
+| `POST`   | `/api/admin/upload-md`              | Markdown 직접 업로드                 |
+| `POST`   | `/api/admin/upload-faq-md`          | FAQ Markdown 업로드                  |
+| `POST`   | `/api/admin/import-catalog`         | 카탈로그 일괄 가져오기               |
+| `GET`    | `/api/admin/documents`              | 문서 목록                            |
+| `GET`    | `/api/admin/documents/{id}`         | 문서 상세                            |
+| `POST`   | `/api/admin/documents/{id}/approve` | 문서 승인 → 인덱싱 대상 포함        |
+| `POST`   | `/api/admin/documents/{id}/reject`  | 문서 반려                            |
+| `POST`   | `/api/admin/documents/{id}/restore` | 문서 복원                            |
+| `DELETE` | `/api/admin/documents/{id}`         | 문서 삭제                            |
+| `POST`   | `/api/admin/documents/{id}/retry`   | 처리 재시도                          |
+| `POST`   | `/api/admin/reindex`                | FAISS 인덱스 전체 재구성 + S3 동기화 |
 
 **FAQ 관리**
 
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| `GET` | `/api/admin/faqs` | FAQ 목록 |
-| `POST` | `/api/admin/faqs` | FAQ 생성 |
-| `PUT` | `/api/admin/faqs/{id}` | FAQ 수정 |
+| 메서드     | 경로                     | 설명     |
+| ---------- | ------------------------ | -------- |
+| `GET`    | `/api/admin/faqs`      | FAQ 목록 |
+| `POST`   | `/api/admin/faqs`      | FAQ 생성 |
+| `PUT`    | `/api/admin/faqs/{id}` | FAQ 수정 |
 | `DELETE` | `/api/admin/faqs/{id}` | FAQ 삭제 |
 
 **프롬프트 관리**
 
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| `GET` | `/api/admin/prompts` | 프롬프트 목록 |
-| `POST` | `/api/admin/prompts` | 프롬프트 생성 |
-| `PUT` | `/api/admin/prompts/{key}` | 프롬프트 수정 |
+| 메서드     | 경로                         | 설명          |
+| ---------- | ---------------------------- | ------------- |
+| `GET`    | `/api/admin/prompts`       | 프롬프트 목록 |
+| `POST`   | `/api/admin/prompts`       | 프롬프트 생성 |
+| `PUT`    | `/api/admin/prompts/{key}` | 프롬프트 수정 |
 | `DELETE` | `/api/admin/prompts/{key}` | 프롬프트 삭제 |
 
 **모니터링**
 
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| `GET` | `/api/admin/sessions` | 세션 목록 |
-| `GET` | `/api/admin/sessions/{id}` | 세션 상세 |
-| `GET` | `/api/admin/logs` | 처리 로그 |
-| `GET` | `/api/admin/audit-logs` | 관리자 감시 로그 |
-| `GET` | `/api/admin/chat-logs` | 상담 로그 (start_date, end_date, session_id 필터) |
-| `GET` | `/api/admin/chat-logs/export` | 상담 로그 Excel 내보내기 |
+| 메서드  | 경로                            | 설명                                              |
+| ------- | ------------------------------- | ------------------------------------------------- |
+| `GET` | `/api/admin/sessions`         | 세션 목록                                         |
+| `GET` | `/api/admin/sessions/{id}`    | 세션 상세                                         |
+| `GET` | `/api/admin/logs`             | 처리 로그                                         |
+| `GET` | `/api/admin/audit-logs`       | 관리자 감시 로그                                  |
+| `GET` | `/api/admin/chat-logs`        | 상담 로그 (start_date, end_date, session_id 필터) |
+| `GET` | `/api/admin/chat-logs/export` | 상담 로그 Excel 내보내기                          |
 
 **설정**
 
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| `GET` | `/api/admin/settings/model` | 현재 모델 + OpenAI 사용 가능 모델 목록 |
-| `PUT` | `/api/admin/settings/model` | LLM 모델 변경 (.env 갱신 + 캐시 clear, 재시작 불필요) |
-| `GET` | `/api/admin/settings/encryption` | 카테고리별 암호화 설정 + 암호화/평문 레코드 수 |
-| `PUT` | `/api/admin/settings/encryption/{category}` | 암호화 ON/OFF 토글 (faq / prompt / document) |
-| `POST` | `/api/admin/settings/encryption/migrate` | 해당 카테고리 전체 레코드 일괄 암호화↔복호화 |
+| 메서드   | 경로                                          | 설명                                                  |
+| -------- | --------------------------------------------- | ----------------------------------------------------- |
+| `GET`  | `/api/admin/settings/model`                 | 현재 모델 + OpenAI 사용 가능 모델 목록                |
+| `PUT`  | `/api/admin/settings/model`                 | LLM 모델 변경 (.env 갱신 + 캐시 clear, 재시작 불필요) |
+| `GET`  | `/api/admin/settings/encryption`            | 카테고리별 암호화 설정 + 암호화/평문 레코드 수        |
+| `PUT`  | `/api/admin/settings/encryption/{category}` | 암호화 ON/OFF 토글 (faq / prompt / document)          |
+| `POST` | `/api/admin/settings/encryption/migrate`    | 해당 카테고리 전체 레코드 일괄 암호화↔복호화         |
 
 **데이터 관리** (사용자 정의 데이터 테이블)
 
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| `GET` | `/api/admin/data-tables` | 테이블 목록 |
-| `POST` | `/api/admin/data-tables` | 테이블 생성 → RDS에 실제 `cdata_{id}` SQL 테이블 CREATE |
-| `GET` | `/api/admin/data-tables/export-all` | 모든 테이블을 개요+시트별로 묶어 Excel 1개 다운로드 |
-| `DELETE` | `/api/admin/data-tables/{id}` | 테이블 삭제 → `cdata_{id}` DROP TABLE |
-| `GET` | `/api/admin/data-tables/{id}` | 테이블 상세 (컬럼 + 데이터 행) |
-| `POST` | `/api/admin/data-tables/{id}/columns` | 컬럼 추가 → ALTER TABLE ADD COLUMN |
-| `PUT` | `/api/admin/data-tables/{id}/columns/{cid}` | 컬럼 이름 변경 → ALTER TABLE RENAME COLUMN |
-| `POST` | `/api/admin/data-tables/{id}/columns/{cid}/reorder` | 컬럼 순서 위/아래 이동 |
-| `DELETE` | `/api/admin/data-tables/{id}/columns/{cid}` | 컬럼 삭제 → ALTER TABLE DROP COLUMN |
-| `POST` | `/api/admin/data-tables/{id}/rows` | 행 추가 → INSERT INTO |
-| `PUT` | `/api/admin/data-tables/{id}/rows/{rid}` | 행 수정 → UPDATE |
-| `DELETE` | `/api/admin/data-tables/{id}/rows/{rid}` | 행 삭제 → DELETE |
-| `GET` | `/api/admin/data-tables/{id}/export` | 개별 테이블 Excel 내보내기 |
-| `POST` | `/api/admin/data-tables/{id}/import` | CSV / Excel 파일로 행 일괄 가져오기 |
+| 메서드     | 경로                                                  | 설명                                                       |
+| ---------- | ----------------------------------------------------- | ---------------------------------------------------------- |
+| `GET`    | `/api/admin/data-tables`                            | 테이블 목록                                                |
+| `POST`   | `/api/admin/data-tables`                            | 테이블 생성 → RDS에 실제 `cdata_{id}` SQL 테이블 CREATE |
+| `GET`    | `/api/admin/data-tables/export-all`                 | 모든 테이블을 개요+시트별로 묶어 Excel 1개 다운로드        |
+| `DELETE` | `/api/admin/data-tables/{id}`                       | 테이블 삭제 →`cdata_{id}` DROP TABLE                    |
+| `GET`    | `/api/admin/data-tables/{id}`                       | 테이블 상세 (컬럼 + 데이터 행)                             |
+| `POST`   | `/api/admin/data-tables/{id}/columns`               | 컬럼 추가 → ALTER TABLE ADD COLUMN                        |
+| `PUT`    | `/api/admin/data-tables/{id}/columns/{cid}`         | 컬럼 이름 변경 → ALTER TABLE RENAME COLUMN                |
+| `POST`   | `/api/admin/data-tables/{id}/columns/{cid}/reorder` | 컬럼 순서 위/아래 이동                                     |
+| `DELETE` | `/api/admin/data-tables/{id}/columns/{cid}`         | 컬럼 삭제 → ALTER TABLE DROP COLUMN                       |
+| `POST`   | `/api/admin/data-tables/{id}/rows`                  | 행 추가 → INSERT INTO                                     |
+| `PUT`    | `/api/admin/data-tables/{id}/rows/{rid}`            | 행 수정 → UPDATE                                          |
+| `DELETE` | `/api/admin/data-tables/{id}/rows/{rid}`            | 행 삭제 → DELETE                                          |
+| `GET`    | `/api/admin/data-tables/{id}/export`                | 개별 테이블 Excel 내보내기                                 |
+| `POST`   | `/api/admin/data-tables/{id}/import`                | CSV / Excel 파일로 행 일괄 가져오기                        |
 
 **DB 브라우저** (RDS 전체 테이블 조회)
 
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| `GET` | `/api/admin/db/tables` | RDS 전체 테이블 목록 + 각 테이블 한국어 설명 |
+| 메서드  | 경로                            | 설명                                                      |
+| ------- | ------------------------------- | --------------------------------------------------------- |
+| `GET` | `/api/admin/db/tables`        | RDS 전체 테이블 목록 + 각 테이블 한국어 설명              |
 | `GET` | `/api/admin/db/tables/{name}` | 테이블 데이터 페이지네이션 조회 (암호화 필드 자동 복호화) |
 
 ---
@@ -482,11 +482,11 @@ GitHub Actions (self-hosted runner — EC2 위에서 직접 실행)
 
 ### AWS 서비스 역할
 
-| 서비스 | 용도 |
-|--------|------|
-| EC2 | 백엔드(FastAPI) + 프론트엔드(빌드 결과물) 호스팅 |
-| Aurora RDS | 운영 데이터베이스 (PostgreSQL 호환, 고가용성) |
-| S3 | FAISS 인덱스 + 문서 파일(PDF, MD, JSON, 청크, 임베딩) 영구 저장 |
+| 서비스     | 용도                                                            |
+| ---------- | --------------------------------------------------------------- |
+| EC2        | 백엔드(FastAPI) + 프론트엔드(빌드 결과물) 호스팅                |
+| Aurora RDS | 운영 데이터베이스 (PostgreSQL 호환, 고가용성)                   |
+| S3         | FAISS 인덱스 + 문서 파일(PDF, MD, JSON, 청크, 임베딩) 영구 저장 |
 
 ### S3 버킷 구조
 
@@ -505,21 +505,21 @@ s3://<bucket>/document-chatbot/
 
 ### GitHub Secrets (배포 환경변수)
 
-| 시크릿 이름 | 용도 |
-|------------|------|
-| `OPENAI_API_KEY` | OpenAI API 인증 |
-| `ENCRYPTION_KEY` | Fernet 암호화 키 (base64) |
-| `ADMIN_PASSWORD` | 레거시 (현재 Google OAuth로 대체, 유지 가능) |
-| `DATABASE_URL` | Aurora RDS 연결 문자열 |
-| `AWS_ACCESS_KEY_ID` | AWS 자격증명 |
-| `AWS_SECRET_ACCESS_KEY` | AWS 자격증명 |
-| `AWS_S3_BUCKET` | S3 버킷명 |
-| `CHANNEL_TALK_URL` | 채널톡 상담원 연결 URL |
-| `VITE_GOOGLE_CLIENT_ID` | Google OAuth 클라이언트 ID (프론트 + 백엔드 공용) |
-| `JWT_SECRET` | JWT 서명 비밀키 (8시간 세션 토큰) |
-| `ADMIN_EMAIL` | 최초 부트스트랩 관리자 이메일 (DB 없이도 항상 접근 가능) |
-| `LANGSMITH_API_KEY` | LangSmith 추적 |
-| `LANGSMITH_PROJECT` | LangSmith 프로젝트명 |
+| 시크릿 이름               | 용도                                                     |
+| ------------------------- | -------------------------------------------------------- |
+| `OPENAI_API_KEY`        | OpenAI API 인증                                          |
+| `ENCRYPTION_KEY`        | Fernet 암호화 키 (base64)                                |
+| `ADMIN_PASSWORD`        | 레거시 (현재 Google OAuth로 대체, 유지 가능)             |
+| `DATABASE_URL`          | Aurora RDS 연결 문자열                                   |
+| `AWS_ACCESS_KEY_ID`     | AWS 자격증명                                             |
+| `AWS_SECRET_ACCESS_KEY` | AWS 자격증명                                             |
+| `AWS_S3_BUCKET`         | S3 버킷명                                                |
+| `CHANNEL_TALK_URL`      | 채널톡 상담원 연결 URL                                   |
+| `VITE_GOOGLE_CLIENT_ID` | Google OAuth 클라이언트 ID (프론트 + 백엔드 공용)        |
+| `JWT_SECRET`            | JWT 서명 비밀키 (8시간 세션 토큰)                        |
+| `ADMIN_EMAIL`           | 최초 부트스트랩 관리자 이메일 (DB 없이도 항상 접근 가능) |
+| `LANGSMITH_API_KEY`     | LangSmith 추적                                           |
+| `LANGSMITH_PROJECT`     | LangSmith 프로젝트명                                     |
 
 ---
 
@@ -529,13 +529,13 @@ s3://<bucket>/document-chatbot/
 
 감지 순서 및 항목:
 
-| 우선순위 | 감지 항목 | 처리 방식 |
-|---------|----------|----------|
-| 1 | 프롬프트 인젝션 (DAN mode, 역할극, 시스템 무시 시도) | 차단 + 안내 응답 |
-| 2 | 개인정보 (주민등록번호, 신용카드, 계좌번호 패턴) | 차단 + 안내 응답 |
-| 3 | 욕설 / 비하 | 차단 + 안내 응답 |
-| 4 | 경쟁사 언급 (코드스테이츠, 패스트캠퍼스, 엘리스 등) | 차단 + 안내 응답 |
-| 5 | 분노 / 비난 표현 ("최악", "사기", "형편없" 등) | 차단 + 안내 응답 |
+| 우선순위 | 감지 항목                                            | 처리 방식        |
+| -------- | ---------------------------------------------------- | ---------------- |
+| 1        | 프롬프트 인젝션 (DAN mode, 역할극, 시스템 무시 시도) | 차단 + 안내 응답 |
+| 2        | 개인정보 (주민등록번호, 신용카드, 계좌번호 패턴)     | 차단 + 안내 응답 |
+| 3        | 욕설 / 비하                                          | 차단 + 안내 응답 |
+| 4        | 경쟁사 언급 (코드스테이츠, 패스트캠퍼스, 엘리스 등)  | 차단 + 안내 응답 |
+| 5        | 분노 / 비난 표현 ("최악", "사기", "형편없" 등)       | 차단 + 안내 응답 |
 
 ### 데이터 암호화
 
@@ -570,24 +570,24 @@ s3://<bucket>/document-chatbot/
 
 ### 페이지 구성
 
-| 경로 | 컴포넌트 | 설명 |
-|------|----------|------|
-| `/` | `ChatPage.tsx` | 메인 채팅 인터페이스 |
-| `/admin` | `AdminPage.tsx` | 관리자 대시보드 (8개 탭) |
-| `/admin/sessions/:id` | `AdminSessionPage.tsx` | 세션 상세 |
+| 경로                    | 컴포넌트                 | 설명                     |
+| ----------------------- | ------------------------ | ------------------------ |
+| `/`                   | `ChatPage.tsx`         | 메인 채팅 인터페이스     |
+| `/admin`              | `AdminPage.tsx`        | 관리자 대시보드 (8개 탭) |
+| `/admin/sessions/:id` | `AdminSessionPage.tsx` | 세션 상세                |
 
 **AdminPage 탭 구성**
 
-| 탭 | 설명 |
-|----|------|
-| 문서 관리 | PDF/Markdown 업로드, 승인/반려, 재시도 |
-| FAQ 관리 | FAQ 조회/생성/수정/삭제 |
-| 프롬프트 | 시스템 프롬프트 런타임 편집 |
-| 로그/내보내기 | 상담 로그 필터 조회 + Excel 내보내기 |
-| 데이터 관리 | 커스텀 SQL 테이블 CRUD + 컬럼 이름/순서 변경 + CSV·Excel 가져오기·내보내기 |
-| DB 브라우저 | RDS 전체 테이블 탐색 + 암호화 필드 복호화 표시 |
-| 설정 | LLM 모델 선택 + 카테고리별 암호화 ON/OFF + 일괄 마이그레이션 |
-| 권한 관리 | 관리자 이메일 추가/제거 |
+| 탭            | 설명                                                                         |
+| ------------- | ---------------------------------------------------------------------------- |
+| 문서 관리     | PDF/Markdown 업로드, 승인/반려, 재시도                                       |
+| FAQ 관리      | FAQ 조회/생성/수정/삭제                                                      |
+| 프롬프트      | 시스템 프롬프트 런타임 편집                                                  |
+| 로그/내보내기 | 상담 로그 필터 조회 + Excel 내보내기                                         |
+| 데이터 관리   | 커스텀 SQL 테이블 CRUD + 컬럼 이름/순서 변경 + CSV·Excel 가져오기·내보내기 |
+| DB 브라우저   | RDS 전체 테이블 탐색 + 암호화 필드 복호화 표시                               |
+| 설정          | LLM 모델 선택 + 카테고리별 암호화 ON/OFF + 일괄 마이그레이션                 |
+| 권한 관리     | 관리자 이메일 추가/제거                                                      |
 
 ### 핵심 커스텀 훅 (useChat.ts)
 
@@ -645,6 +645,7 @@ Google One Tap 로그인 → ID Token 전송 → 백엔드 검증 → JWT 발급
 ### 설정 탭
 
 **LLM 모델 선택**
+
 - OpenAI API에서 사용 가능한 채팅 모델 목록 실시간 조회 (TTS·이미지·임베딩·레거시 모델 자동 제외)
 - 라디오 카드 방식 — 모델별 설명·속도·컨텍스트·입출력 단가($/1M tok) 표시
 - 추천순·지능순·가성비순·가격순·속도순 정렬, 클릭마다 오름/내림 토글
@@ -711,20 +712,20 @@ RDS Aurora의 전체 테이블을 읽기 전용으로 탐색:
 
 ### RAGAS 4대 지표
 
-| 지표 | 점수 | 설명 |
-|------|------|------|
-| **Faithfulness** | **0.9656** (96.6%) | 답변이 검색된 문서 내용에 근거한 비율. 높을수록 환각 없음 |
-| **Answer Relevancy** | **0.4737** (47.4%) | 답변이 질문에 얼마나 직접적으로 대응하는지 |
-| **Context Precision** | **0.7554** (75.5%) | 검색된 문서 중 실제로 필요한 문서 비율 (검색 정밀도) |
-| **Context Recall** | **0.9220** (92.2%) | 정답 도출에 필요한 문서를 빠짐없이 검색했는지 (검색 재현율) |
+| 지표                        | 점수                     | 설명                                                        |
+| --------------------------- | ------------------------ | ----------------------------------------------------------- |
+| **Faithfulness**      | **0.9656** (96.6%) | 답변이 검색된 문서 내용에 근거한 비율. 높을수록 환각 없음   |
+| **Answer Relevancy**  | **0.4737** (47.4%) | 답변이 질문에 얼마나 직접적으로 대응하는지                  |
+| **Context Precision** | **0.7554** (75.5%) | 검색된 문서 중 실제로 필요한 문서 비율 (검색 정밀도)        |
+| **Context Recall**    | **0.9220** (92.2%) | 정답 도출에 필요한 문서를 빠짐없이 검색했는지 (검색 재현율) |
 
 ### Hallucination 테스트
 
-| 항목 | 결과 |
-|------|------|
-| 테스트 케이스 | 5개 (문서에 없는 정보 질문) |
-| 올바른 거절 | 5/5 |
-| **통과율** | **100%** |
+| 항목             | 결과                        |
+| ---------------- | --------------------------- |
+| 테스트 케이스    | 5개 (문서에 없는 정보 질문) |
+| 올바른 거절      | 5/5                         |
+| **통과율** | **100%**              |
 
 테스트된 거절 케이스: 수료율, 취업률, 강사 이름, 환불 정책, 장학금 제도 질문 → 전부 "확인 불가" 응답으로 정상 처리
 
@@ -848,20 +849,24 @@ document-chatbot_practice/
 ### 2026-05-18
 
 **LangGraph reject 분기 — 범위 외 질문 LLM 호출 차단**
+
 - `retrieve → (out_of_scope?) → reject / generate → verify` 조건부 라우팅 도입
 - 검색 점수가 `REJECT_THRESHOLD(=1.0)` 미만이거나 컨텍스트가 비면 LLM을 호출하지 않고 유도 응답으로 직행 → 외부 컨설팅/일반 대화 비용 0원
 - 상담 시스템 프롬프트에 "외부 개발 컨설팅·다른 챗봇 제작·협업 요청 절대 응대 금지" 규칙 추가
 
 **채널톡 상담 매니저 연결 자동화**
+
 - RAG 응답에서 LLM이 "채널톡"을 언급하거나 URL/마크다운 링크를 본문에 끼우면 백엔드가 sanitize 후 `source="handoff"`로 자동 승격 → 프론트엔드 파란 버튼 항상 노출
 - LLM 시스템 가이드 수정: 본문에 URL이나 마크다운 링크를 직접 작성하지 않도록 명시 (링크 버튼은 시스템이 별도 표시)
 - 정적 cancel/handoff 응답은 원본 prompt 그대로 사용 — 본문 중복 링크 제거
 
 **FAQ 매칭 강화**
+
 - 대화 중(`has_history`)에도 `match_button_faq` → `match_faq_general` 단계를 거치도록 보강 (기존엔 첫 메시지만)
 - 점수 임계값 완화: `match_faq_general` 7.5 → **6.0**, `search_faq` 7.0 → **6.0**
 
 **프론트엔드 UX**
+
 - 채팅 스크롤 위치를 conversation별로 sessionStorage(`chatScroll:v1:{convId}`)에 저장 → 새로고침·뒤로가기 후에도 보던 위치 그대로 유지
 - 사용자가 위쪽을 보는 중에는 새 토큰이 와도 강제로 따라가지 않음 (맨 아래 80px 이내일 때만 auto-scroll)
 - 챗 UI 모바일 반응형 최적화
@@ -875,6 +880,7 @@ document-chatbot_practice/
 ### 2026-05-17
 
 **Google OAuth 2.0 관리자 인증 전환**
+
 - 비밀번호 로그인 제거 → Google One Tap 로그인으로 전환
 - 백엔드: `google-auth[requests]`로 ID Token 검증 → `PyJWT`로 8시간 JWT 발급
 - `admin_users` 테이블 추가 — 허용 이메일 목록 관리
@@ -882,19 +888,23 @@ document-chatbot_practice/
 - 프론트엔드: `adminPassword` → `adminToken` (sessionStorage), 401 수신 시 자동 로그아웃
 
 **런타임 LLM 모델 선택**
+
 - 설정 탭 신규 추가: OpenAI API에서 사용 가능한 채팅 모델 목록 실시간 조회
 - 드롭다운 선택 후 "적용" → `.env` 갱신 + `get_settings()` 캐시 clear → 재시작 없이 즉시 반영
 - 새 모델 출시 시 자동 목록 갱신 (instruct/fine-tuned 모델 필터 제외)
 
 **권한 관리 탭**
+
 - 관리자 이메일 추가/제거 UI
 - `ADMIN_EMAIL`(기본 관리자)은 제거 불가 처리
 
 **챗봇 답변 톤 개선**
+
 - 말투를 따뜻하고 친근한 상담사 스타일로 조정
 - 이모티콘: 자연스러울 때 1-2개 허용 (억지 사용 금지, 응답당 최대 2개)
 
 **카테고리별 암호화 관리**
+
 - 설정 탭에 암호화 섹션 추가
 - FAQ 내용 / 프롬프트 내용 / 문서 파일명의 암호화 ON/OFF 토글 (채팅은 항상 ON)
 - 카테고리별 암호화/평문 레코드 수 현황 표시
@@ -903,12 +913,14 @@ document-chatbot_practice/
 - `.env`에 `ENCRYPT_FAQ` / `ENCRYPT_PROMPT` / `ENCRYPT_DOCUMENT` 추가 (기본값 `true`)
 
 **데이터 관리 탭 기능 확장**
+
 - **컬럼 이름 변경**: 이름 클릭 → 인라인 편집 → Enter 저장 / Escape 취소 (ALTER TABLE RENAME COLUMN)
 - **컬럼 순서 변경**: ↑↓ 버튼으로 인접 컬럼과 위치 교환 (sort_order 재정렬)
 - **CSV / Excel 가져오기**: 헤더 행이 컬럼명과 일치하면 자동 매핑 → 일괄 INSERT (UTF-8 BOM 지원)
 - **전체 내보내기**: 모든 테이블을 개요 시트 + 테이블별 시트로 묶어 Excel 1개 다운로드
 
 **권한 관리 탭 UI 개선**
+
 - 최상위 관리자(`ADMIN_EMAIL`) 별도 카드로 상단 강조 표시 — 삭제 불가·모든 권한 보유 명시
 - 관리자 목록에 추가자(added_by)·추가 일시 표시
 - 현재 로그인 계정에 "나" 뱃지 표시
@@ -919,6 +931,7 @@ document-chatbot_practice/
   - 비슈퍼어드민 요청 시 403 반환
 
 **LLM 모델 설정 전면 개편**
+
 - 드롭다운 → 라디오 카드 방식으로 교체: 모델별 특징·속도·입출력 가격 한눈에 비교
 - 실제 OpenAI API 가격 표시 (입력/출력 per 1M tokens 기준)
 - TTS·이미지 생성·임베딩 모델 필터: `realtime·audio·tts·whisper·dall·embedding·moderation·vision` 키워드 포함 시 목록 제외
@@ -933,6 +946,7 @@ document-chatbot_practice/
 ### 2026-05-16
 
 **데이터 관리 ↔ DB 브라우저 연동**
+
 - 데이터 관리 탭에서 테이블 생성 시 RDS에 실제 SQL 테이블(`cdata_{id}`) 자동 생성
 - 컬럼 추가/삭제가 `ALTER TABLE ADD/DROP COLUMN`으로 실제 스키마 변경
 - 행 CRUD가 `INSERT / UPDATE / DELETE INTO cdata_{id}` 실제 SQL DML로 동작
@@ -944,6 +958,7 @@ document-chatbot_practice/
 ### 2026-05-15
 
 **챗봇 응답 품질 개선**
+
 - 대화 이력(`history`) 기반 맥락 파악 후 불필요한 되묻기 방지
 - 한 메시지에 여러 질문이 있을 때 통합해서 한 번에 답변
 - 이전 대화에서 약속한 내용 이행 (거절/주제 전환 시 예외 처리)
@@ -952,10 +967,12 @@ document-chatbot_practice/
 - 채널톡 URL을 LLM 컨텍스트에 주입하여 링크 직접 제공
 
 **관리자 페이지 개선**
+
 - 대화 로그 조회 버튼 작동 수정 및 세션 ID 선택 사항으로 변경
 - 로그인 비밀번호 표시/숨기기 토글 추가
 - 데이터 관리 탭 신규 추가 (커스텀 테이블 CRUD + Excel 내보내기)
 - DB 브라우저 탭 신규 추가 (RDS Aurora 전체 테이블 탐색)
 
 **용어 정정**
+
 - 제공 물품·지참 사항 관련 FAQ, 문서, 스크립트에서 맥락별 용어 통일
