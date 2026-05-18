@@ -42,29 +42,29 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
 
   if (isUser) {
     return (
-      <div className="flex justify-end items-end gap-1.5 mb-1 px-4">
+      <div className="flex justify-end items-end gap-1.5 mb-2 px-3 sm:px-4">
         <span className="text-[10px] text-gray-400 mb-0.5 shrink-0">{timeString}</span>
-        <div className="max-w-[70%] rounded-2xl rounded-br-sm bg-brand-500 px-4 py-2.5 text-[14px] leading-relaxed text-white shadow-sm">
-          <div className="whitespace-pre-wrap">{message.content}</div>
+        <div className="max-w-[85%] sm:max-w-[78%] rounded-2xl rounded-br-sm bg-brand-500 px-3.5 py-2.5 sm:px-4 sm:py-3 text-[14.5px] sm:text-[15px] leading-[1.6] sm:leading-[1.65] text-white shadow-sm">
+          <div className="whitespace-pre-wrap break-keep">{message.content}</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex items-start gap-2.5 mb-1 px-4">
+    <div className="flex items-start gap-2 sm:gap-2.5 mb-2 px-3 sm:px-4">
       <div className="shrink-0 mt-1">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-500 text-white text-xs font-bold shadow-sm">
+        <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-brand-500 text-white text-xs font-bold shadow-sm">
           AI
         </div>
       </div>
 
-      <div className="flex flex-col max-w-[72%]">
+      <div className="flex flex-col max-w-[85%] sm:max-w-[82%]">
         <span className="mb-1 text-[12px] font-semibold text-gray-600">엔코아AI캠퍼스</span>
         <div className="flex items-end gap-1.5">
           <div className="flex flex-col items-start gap-1.5">
             {isStreaming && assistantBubbles.length === 0 ? (
-              <div className="w-fit max-w-full rounded-2xl rounded-tl-sm bg-white px-4 py-2.5 text-[14px] leading-relaxed text-gray-800 shadow-sm border border-gray-100">
+              <div className="w-fit max-w-full rounded-2xl rounded-tl-sm bg-white px-3.5 py-2.5 sm:px-4 sm:py-3 text-[14.5px] sm:text-[15px] leading-[1.6] sm:leading-[1.65] text-gray-800 shadow-sm border border-gray-100">
                 <div className="flex items-center gap-2">
                   <span className="break-keep">{THINKING_STATUSES[statusIndex]}</span>
                   <span className="flex gap-0.5 pt-1">
@@ -78,7 +78,7 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
               assistantBubbles.map((bubble, index) => (
                 <div
                   key={index}
-                  className={`w-fit max-w-full rounded-2xl bg-white px-4 py-2.5 text-[14px] leading-relaxed text-gray-800 shadow-sm border border-gray-100 ${
+                  className={`w-fit max-w-full rounded-2xl bg-white px-3.5 py-2.5 sm:px-4 sm:py-3 text-[14.5px] sm:text-[15px] leading-[1.6] sm:leading-[1.65] text-gray-800 shadow-sm border border-gray-100 ${
                     index === 0 ? 'rounded-tl-sm' : ''
                   }`}
                 >

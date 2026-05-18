@@ -44,10 +44,10 @@ const SuggestedQuestions: React.FC<Props> = ({ questions, onSelect, disabled }) 
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex gap-2 overflow-x-auto scrollbar-none" style={{ scrollbarWidth: 'none' }}>
+      <div className="flex gap-2 overflow-x-auto pb-1">
         {topRow.map((q) => renderButton(q, onSelect, disabled))}
       </div>
-      <div className="flex gap-2 overflow-x-auto scrollbar-none" style={{ scrollbarWidth: 'none' }}>
+      <div className="flex gap-2 overflow-x-auto pb-1">
         {bottomRow.map((q) => renderButton(q, onSelect, disabled))}
       </div>
     </div>

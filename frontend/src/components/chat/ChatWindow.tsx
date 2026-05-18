@@ -107,7 +107,7 @@ const ChatWindow: React.FC<Props> = ({
 
       {/* 퀵리플라이 버튼 */}
       {showSuggestions && (
-        <div className="shrink-0 border-t border-blue-100 bg-white px-4 py-2.5">
+        <div className="shrink-0 border-t border-blue-100 bg-white px-3 py-2 sm:px-4 sm:py-2.5">
           <SuggestedQuestions
             questions={suggestedQuestions}
             onSelect={sendMessage}
