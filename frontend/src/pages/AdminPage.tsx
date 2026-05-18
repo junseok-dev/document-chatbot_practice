@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GoogleLogin } from '@react-oauth/google';
 import { adminApi, clearAdminToken, getAdminToken, saveAdminToken } from '../services/api';
+import InfoTooltip from '../components/admin/InfoTooltip';
 import {
   AdminDocument,
   AdminDocumentDetail,
@@ -1421,17 +1422,23 @@ export default function AdminPage() {
                 </div>
                 <div className="mt-3 space-y-0.5">
                   {dbTables.map((t) => (
-                    <button
-                      key={t.name}
-                      onClick={() => void handleSelectDbTable(t.name)}
-                      className={`w-full rounded-xl px-3 py-2 text-left ${selectedDbTable === t.name ? 'bg-slate-900 text-white' : 'hover:bg-slate-100 text-slate-700'}`}
-                    >
-                      <div className="truncate text-sm font-medium">{t.display_name || t.name}</div>
-                      {t.description && (
-                        <div className={`truncate text-xs ${selectedDbTable === t.name ? 'text-slate-300' : 'text-slate-500'}`}>{t.description}</div>
-                      )}
-                      <div className={`text-xs ${selectedDbTable === t.name ? 'text-slate-400' : 'text-slate-400'}`}>{t.row_count.toLocaleString()}행</div>
-                    </button>
+                    <div key={t.name} className="group relative">
+                      <button
+                        onClick={() => void handleSelectDbTable(t.name)}
+                        className={`w-full rounded-xl px-3 py-2 text-left ${selectedDbTable === t.name ? 'bg-slate-900 text-white' : 'hover:bg-slate-100 text-slate-700'}`}
+                      >
+                        <div className="truncate text-sm font-medium">{t.display_name || t.name}</div>
+                        {t.description && (
+                          <div className={`truncate text-xs ${selectedDbTable === t.name ? 'text-slate-300' : 'text-slate-500'}`}>{t.description}</div>
+                        )}
+                        <div className={`text-xs ${selectedDbTable === t.name ? 'text-slate-400' : 'text-slate-400'}`}>{t.row_count.toLocaleString()}행</div>
+                      </button>
+                      <div className="pointer-events-none absolute left-full top-0 z-30 ml-2 w-72 rounded-lg bg-slate-900 px-3 py-2 text-[11px] leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 whitespace-pre-line">
+                        <div className="mb-0.5 text-sm font-semibold text-white">{t.display_name || t.name}</div>
+                        {t.description && <div className="text-slate-300">{t.description}</div>}
+                        <div className="mt-1 font-mono text-[10px] text-slate-400">{t.name} · {t.row_count.toLocaleString()}행 · {t.columns.length}컬럼</div>
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -1455,7 +1462,19 @@ export default function AdminPage() {
                         const meta = dbTables.find((t) => t.name === selectedDbTable);
                         return (
                           <>
-                            <h2 className="font-semibold text-slate-900">{meta?.display_name || selectedDbTable}</h2>
+                            <div className="flex items-center gap-2">
+                              <h2 className="font-semibold text-slate-900">{meta?.display_name || selectedDbTable}</h2>
+                              {meta && (
+                                <InfoTooltip
+                                  align="left"
+                                  text={
+                                    (meta.description ? `${meta.description}\n\n` : '') +
+                                    `테이블명: ${meta.name}\n` +
+                                    `컬럼 ${meta.columns.length}개: ${meta.columns.join(', ')}`
+                                  }
+                                />
+                              )}
+                            </div>
                             {meta?.description && <p className="text-xs text-slate-500">{meta.description}</p>}
                             <p className="text-xs text-slate-400">전체 {dbTableData.total.toLocaleString()}행 · {dbTableData.page}페이지 · <span className="font-mono">{selectedDbTable}</span></p>
                           </>
@@ -1659,7 +1678,17 @@ export default function AdminPage() {
             <section className="rounded-3xl bg-white p-6 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">암호화 설정</h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-semibold text-slate-900">암호화 설정</h2>
+                    <InfoTooltip
+                      align="left"
+                      text={
+                        '데이터베이스의 민감 필드를 Fernet(AES-128-CBC + HMAC-SHA256) 대칭 암호화로 보호합니다.\n' +
+                        '저장 형식: `enc::<base64>` — 접두사로 평문/암호문을 자동 구분.\n' +
+                        'DB가 외부로 유출되어도 평문 정보가 노출되지 않습니다.'
+                      }
+                    />
+                  </div>
                   <p className="mt-1 text-sm text-slate-500">카테고리별 암호화 ON/OFF와 기존 데이터 일괄 변환을 관리합니다.</p>
                 </div>
                 <button onClick={() => { setEncryptionSettings(null); void loadEncryptionSettings(); }} className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm text-slate-600">새로고침</button>
@@ -1673,7 +1702,19 @@ export default function AdminPage() {
                   <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-slate-700">채팅 내용 (메시지·세션)</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium text-slate-700">채팅 내용 (메시지·세션)</p>
+                          <InfoTooltip
+                            align="left"
+                            text={
+                              '보호 대상 테이블·필드:\n' +
+                              '• chat_messages.content (대화 본문)\n' +
+                              '• chat_logs.question / answer / retrieval_chunks (분석 로그)\n' +
+                              '• chat_sessions.encrypted_user_name (사용자 이름)\n\n' +
+                              '사용자 개인정보 보호법상 가장 민감한 데이터이므로 코드 차원에서 항상 ON으로 고정되어 있습니다.'
+                            }
+                          />
+                        </div>
                         <p className="mt-0.5 text-xs text-slate-400">개인정보 보호를 위해 항상 암호화됩니다. 관리자가 변경할 수 없습니다.</p>
                       </div>
                       <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">항상 ON</span>
@@ -1681,18 +1722,39 @@ export default function AdminPage() {
                   </div>
 
                   {/* 설정 가능한 카테고리 */}
-                  {encryptionSettings.categories.map((cat) => (
+                  {encryptionSettings.categories.map((cat) => {
+                    const categoryHint =
+                      cat.key === 'faq'
+                        ? '보호 대상: faqs 테이블의 question / answer / category / keywords_json / aliases_json / search_hints_json / source_files_json\n\nFAQ 콘텐츠는 운영 노하우이자 학습 안내의 핵심 자산입니다. DB 유출 시 외부에서 답변 패턴을 그대로 가져갈 수 있어 보호 권장.'
+                        : cat.key === 'prompt'
+                          ? '보호 대상: prompt_configs.content (상담·취소·핸드오프·fallback 시스템 프롬프트)\n\n프롬프트는 챗봇 동작의 핵심 비밀입니다. 거절 규칙, 표현 가이드, 거버넌스 정책이 모두 담겨 있어 유출되면 우회 시도가 쉬워집니다.'
+                          : '보호 대상: documents.original_filename, documents.error_message, chunks.content\n\n원본 파일명에는 내부 자료 명명 규칙이, 청크 본문에는 미공개 문서 내용이 들어 있을 수 있습니다.';
+
+                    return (
                     <div key={cat.key} className="rounded-2xl border border-slate-200 p-4">
                       <div className="flex flex-wrap items-start justify-between gap-4">
                         <div>
-                          <p className="text-sm font-medium text-slate-900">{cat.label}</p>
-                          <div className="mt-1.5 flex flex-wrap gap-3 text-xs text-slate-500">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-slate-900">{cat.label}</p>
+                            <InfoTooltip align="left" text={categoryHint} />
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-slate-500">
                             <span>전체 {cat.total}건</span>
                             <span className="text-amber-600">암호화 {cat.encrypted_count}건</span>
                             <span className="text-emerald-600">평문 {cat.plain_count}건</span>
+                            <InfoTooltip
+                              align="left"
+                              width="w-64"
+                              text={
+                                '전체: 카테고리 활성 레코드 총 수\n' +
+                                '암호화: `enc::` 접두사로 저장된 레코드\n' +
+                                '평문: 그대로 저장된 레코드\n\n' +
+                                '두 값이 섞여 있어도 읽을 때 자동 구분됩니다.'
+                              }
+                            />
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
                           <label className="flex cursor-pointer items-center gap-2">
                             <div className="relative">
                               <input
@@ -1706,10 +1768,18 @@ export default function AdminPage() {
                             </div>
                             <span className="text-sm font-medium text-slate-700">{cat.encrypt_enabled ? '암호화 ON' : '암호화 OFF'}</span>
                           </label>
+                          <InfoTooltip
+                            align="right"
+                            text={
+                              'ON: 앞으로 새로 저장·수정되는 레코드를 암호화합니다.\n' +
+                              'OFF: 평문으로 저장합니다.\n\n' +
+                              '⚠️ 토글은 "앞으로의 저장"만 결정합니다. 기존 레코드는 그대로 남으니 아래 마이그레이션 버튼으로 일괄 변환하세요.'
+                            }
+                          />
                         </div>
                       </div>
                       {cat.total > 0 && (
-                        <div className="mt-3 flex gap-2 border-t border-slate-100 pt-3">
+                        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
                           <button
                             disabled={migrating !== null || cat.plain_count === 0}
                             onClick={() => void handleMigrateEncryption(cat.key, 'encrypt')}
@@ -1717,6 +1787,13 @@ export default function AdminPage() {
                           >
                             {migrating === `${cat.key}_encrypt` ? '처리 중...' : `평문 → 암호화 (${cat.plain_count}건)`}
                           </button>
+                          <InfoTooltip
+                            align="left"
+                            text={
+                              '현재 평문 상태인 모든 레코드를 한 번에 Fernet 암호화로 변환합니다.\n\n' +
+                              '버튼이 비활성화돼 있으면 평문 레코드가 0건이라는 뜻입니다.'
+                            }
+                          />
                           <button
                             disabled={migrating !== null || cat.encrypted_count === 0}
                             onClick={() => void handleMigrateEncryption(cat.key, 'decrypt')}
@@ -1724,10 +1801,19 @@ export default function AdminPage() {
                           >
                             {migrating === `${cat.key}_decrypt` ? '처리 중...' : `암호화 → 평문 (${cat.encrypted_count}건)`}
                           </button>
+                          <InfoTooltip
+                            align="left"
+                            text={
+                              '현재 암호화 상태인 모든 레코드를 한 번에 복호화합니다.\n\n' +
+                              'SQL 직접 조회, 외부 분석 도구 연결, DB 백업 반출 시 평문화가 필요할 때 사용합니다.\n\n' +
+                              '⚠️ 평문화 후에는 DB가 노출되면 그대로 읽히니 분석이 끝난 뒤 다시 암호화 마이그레이션 권장.'
+                            }
+                          />
                         </div>
                       )}
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
               )}
             </section>
