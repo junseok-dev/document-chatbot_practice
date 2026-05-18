@@ -128,15 +128,29 @@ def sync_faqs_to_file(db: Session) -> None:
 
 
 _faq_seeded = False
+_faq_file_mtime: float | None = None
+
+
+def _get_faq_file_mtime() -> float | None:
+    try:
+        if FAQ_PATH.exists():
+            return FAQ_PATH.stat().st_mtime
+    except OSError:
+        return None
+    return None
 
 
 def _get_faq_data() -> dict:
-    global _faq_seeded
+    global _faq_seeded, _faq_file_mtime
     db = SessionLocal()
     try:
-        if not _faq_seeded:
+        current_mtime = _get_faq_file_mtime()
+        needs_seed = (not _faq_seeded) or (current_mtime is not None and current_mtime != _faq_file_mtime)
+
+        if needs_seed:
             seed_faqs(db)
             _faq_seeded = True
+            _faq_file_mtime = current_mtime
         rows = db.query(FaqRecord).filter(FaqRecord.is_active.is_(True)).order_by(FaqRecord.id.asc()).all()
         payload = _load_faq_json()
         payload["faqs"] = [_serialize_faq(row) for row in rows]
