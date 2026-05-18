@@ -24,23 +24,21 @@ const ChatPage: React.FC = () => {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-gray-50">
       <header className="relative z-10 shrink-0 border-b border-gray-200 bg-white shadow-sm">
-        <div className="mx-auto flex h-16 w-full max-w-lg items-center justify-between px-4">
-          <div className="flex min-w-0 items-center gap-2 sm:gap-4">
+        <div className="mx-auto flex min-h-[64px] w-full max-w-lg items-center justify-between gap-2 px-3 py-2.5 sm:px-4">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2.5">
             <button
               onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}
-              className="shrink-0 rounded-full p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="shrink-0 rounded-full p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
               aria-label="뒤로 가기"
             >
               <ArrowLeft size={20} />
             </button>
-            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-blue-600 text-sm font-bold text-white shadow-inner">
-                AI
-              </div>
-              <div className="min-w-0">
-                <h1 className="truncate text-base sm:text-lg font-bold leading-tight text-gray-900">엔코아AI캠퍼스 상담 챗봇</h1>
-                <p className="hidden sm:block text-xs font-medium text-brand-600">익명 세션으로만 동작하며 브라우저를 닫으면 기록이 사라집니다.</p>
-              </div>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-blue-600 text-sm font-bold text-white shadow-inner">
+              AI
+            </div>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-[15px] sm:text-base font-bold leading-tight text-gray-900">엔코아AI캠퍼스 상담 챗봇</h1>
+              <p className="hidden sm:block truncate text-[11px] font-medium text-brand-600/90">익명 세션 · 종료 시 기록 삭제</p>
             </div>
           </div>
 

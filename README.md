@@ -181,20 +181,33 @@
                 │
                 ▼ 최종 top_k 문서
 ┌───────────────────────────────────────────────────────┐
-│              LLM 응답 생성 (openai_service.py)         │
+│        LangGraph 파이프라인 (graph_service.py)         │
 │                                                       │
-│  System Prompt:                                       │
-│  ├ 상담 시스템 프롬프트 (Aurora RDS에서 런타임 로드)    │
-│  └ 채팅 스타일 가이드 (말풍선 3개 이하, 목록 형식)      │
+│   retrieve ──▶ (out_of_scope?)                        │
+│                 │ Yes                                 │
+│                 ▼                                     │
+│              reject_node ─────────────────▶ END       │
+│                 (LLM 호출 0, 유도 응답)                │
 │                                                       │
-│  User Message:                                        │
-│  ├ 사용자 질문                                         │
-│  └ 검색된 문서 내용 (참고 자료)                         │
-│                                                       │
-│  → gpt-5-mini ChatCompletion 호출                     │
-│  → Server-Sent Events로 토큰 단위 스트리밍 전송        │
+│                 │ No                                  │
+│                 ▼                                     │
+│              generate_node (gpt-5-mini)               │
+│                 │                                     │
+│                 ▼                                     │
+│              (top_score < VERIFY_THRESHOLD?)          │
+│                 │ Yes                                 │
+│                 ▼                                     │
+│              verify_node (사실성 재검증) ───▶ END     │
 └───────────────────────────────────────────────────────┘
+                │
+                ▼
+        Server-Sent Events 토큰 단위 스트리밍
+        + 후처리: 채널톡 언급 시 source="handoff" 자동 승격
 ```
+
+- `REJECT_THRESHOLD = 1.0` — 검색 점수가 이 미만이거나 context가 비면 LLM 호출 없이 유도 응답
+- `VERIFY_THRESHOLD = 3.5` — 점수가 낮은 경우 verify_node가 문서 기반으로 답변을 재검증
+- LangSmith 추적 가능 (`LANGSMITH_TRACING_V2=true`)
 
 ### 4.2 임베딩 및 벡터 저장소
 
@@ -255,20 +268,26 @@ POST /api/chat/stream
     └─ 경쟁사 언급 감지  → source="guardrail"
         │ (통과)
         ▼
-[2] 취소/환불 요청?  → source="handoff"  (채널톡 URL 제공)
+[2] 취소/환불 요청?  → source="handoff"  (채널톡 버튼 자동 노출)
 [3] 상담원 연결?     → source="handoff"
 [4] 인사말?          → source="faq"     (고정 응답)
         │ (해당 없음)
         ▼
-[5] FAQ 매칭 (faq_service.py)
-    ├─ 버튼 FAQ (정확 매칭)    → source="faq"
-    ├─ 일반 FAQ (유사도 ≥ 6.0) → source="faq"
+[5] FAQ 매칭 (faq_service.py) — 첫 메시지 / 대화 중 모두 적용
+    ├─ 버튼 FAQ (점수 ≥ 10.0)         → source="faq"
+    ├─ 일반 FAQ (점수 ≥ 6.0)          → source="faq"
     └─ 훈련비/모집인원/취업률 특수 쿼리 → source="faq"
         │ (FAQ 미매칭)
         ▼
-[6] 문서 검색 + LLM 생성 (RAG 파이프라인)
-    → source="document"
-        │ (검색 실패 / 오류)
+[6] RAG 파이프라인 (LangGraph: retrieve → reject / generate → verify)
+    ├─ 검색 점수 < REJECT_THRESHOLD → source="fallback" (LLM 호출 없이 유도 응답)
+    └─ 그 외                        → source="document" (LLM 생성)
+        │
+        ▼
+[6-1] 후처리 (_sanitize_and_promote)
+    ├─ 본문에서 URL/마크다운 링크 sanitize
+    └─ "채널톡" 언급 시 → source="handoff" 자동 승격
+        │ (오류)
         ▼
 [7] Fallback 응답 → source="fallback"
 
@@ -598,10 +617,22 @@ await chatApi.streamMessage(
 ### 세션 저장소 (sessionStorage)
 
 ```typescript
-"chatConversations:v2"  // 대화 목록 (제목, 메시지, 세션ID)
-"chatCurrentConvId:v2"  // 현재 대화 ID
-"adminToken"            // 관리자 JWT (탭 세션 한정, 8시간 유효)
+"chatConversations:v2"      // 대화 목록 (제목, 메시지, 세션ID)
+"chatCurrentConvId:v2"      // 현재 대화 ID
+"chatScroll:v1:{convId}"    // conversation별 스크롤 위치 (새로고침/뒤로가기 후 복원)
+"adminToken"                // 관리자 JWT (탭 세션 한정, 8시간 유효)
 ```
+
+### 스크롤 위치 복원
+
+- 대화별로 마지막 스크롤 위치를 sessionStorage에 저장 → 새로고침·뒤로가기 후에도 같은 위치
+- 사용자가 위쪽을 보는 중이면 새 토큰이 와도 따라가지 않음 (맨 아래 80px 이내일 때만 auto-scroll)
+
+### 반응형 레이아웃
+
+- 모바일(< 768px): 풀폭 사용, 카드 보더·그림자 없음, 헤더 부제·검색 버튼 텍스트 숨김
+- 데스크탑(≥ 768px): `max-w-lg(512px)` 가운데 카드 + 보더 + 그림자
+- 말풍선 폭·패딩·글자 크기는 `sm:` 브레이크포인트로 단계적 적용
 
 ---
 
@@ -813,6 +844,33 @@ document-chatbot_practice/
 ---
 
 ## 14. 변경 이력
+
+### 2026-05-18
+
+**LangGraph reject 분기 — 범위 외 질문 LLM 호출 차단**
+- `retrieve → (out_of_scope?) → reject / generate → verify` 조건부 라우팅 도입
+- 검색 점수가 `REJECT_THRESHOLD(=1.0)` 미만이거나 컨텍스트가 비면 LLM을 호출하지 않고 유도 응답으로 직행 → 외부 컨설팅/일반 대화 비용 0원
+- 상담 시스템 프롬프트에 "외부 개발 컨설팅·다른 챗봇 제작·협업 요청 절대 응대 금지" 규칙 추가
+
+**채널톡 상담 매니저 연결 자동화**
+- RAG 응답에서 LLM이 "채널톡"을 언급하거나 URL/마크다운 링크를 본문에 끼우면 백엔드가 sanitize 후 `source="handoff"`로 자동 승격 → 프론트엔드 파란 버튼 항상 노출
+- LLM 시스템 가이드 수정: 본문에 URL이나 마크다운 링크를 직접 작성하지 않도록 명시 (링크 버튼은 시스템이 별도 표시)
+- 정적 cancel/handoff 응답은 원본 prompt 그대로 사용 — 본문 중복 링크 제거
+
+**FAQ 매칭 강화**
+- 대화 중(`has_history`)에도 `match_button_faq` → `match_faq_general` 단계를 거치도록 보강 (기존엔 첫 메시지만)
+- 점수 임계값 완화: `match_faq_general` 7.5 → **6.0**, `search_faq` 7.0 → **6.0**
+
+**프론트엔드 UX**
+- 채팅 스크롤 위치를 conversation별로 sessionStorage(`chatScroll:v1:{convId}`)에 저장 → 새로고침·뒤로가기 후에도 보던 위치 그대로 유지
+- 사용자가 위쪽을 보는 중에는 새 토큰이 와도 강제로 따라가지 않음 (맨 아래 80px 이내일 때만 auto-scroll)
+- 챗 UI 모바일 반응형 최적화
+  - 카드 폭 `max-w-lg(512px)`, 모바일에선 풀폭/보더 없음 → `md:`(768px+) 이상에서 카드 스타일
+  - 말풍선 폭·패딩·글자 크기·줄간격을 `sm:` 브레이크포인트로 반응형 적용
+  - 추천 질문 두 줄을 단일 `overflow-x-auto` 컨테이너로 묶어 좌우 함께 이동 (스크롤바 입력란 위 한 곳에만 노출)
+  - 헤더 부제 단순화(`익명 세션 · 종료 시 기록 삭제`) + `truncate` 처리, 모바일 부제 숨김
+  - HistoryDropdown 위치를 anchor 버튼의 우측 기준으로 계산 → 좁은 카드 폭에서도 안쪽에 정렬
+- 인사말의 핵심 키워드(`과정`, `수강 조건`, `비용`, `취업 지원`) 마크다운 볼드 강조
 
 ### 2026-05-17
 

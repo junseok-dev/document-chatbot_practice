@@ -80,11 +80,15 @@ const HistoryDropdown: React.FC<Props> = ({ open, onClose, onSelect, currentConv
 
   if (!open) return null;
 
+  const anchorRect = anchorRef.current?.getBoundingClientRect();
+  const top = (anchorRect?.bottom ?? 64) + 8;
+  const rightOffset = anchorRect ? Math.max(8, window.innerWidth - anchorRect.right) : 16;
+
   return (
     <div
       ref={panelRef}
-      className="fixed right-4 z-50 w-80 rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden"
-      style={{ top: (anchorRef.current?.getBoundingClientRect().bottom ?? 64) + 8 }}
+      className="fixed z-50 w-72 sm:w-80 max-w-[calc(100vw-1rem)] rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden"
+      style={{ top, right: rightOffset }}
     >
       {/* Search input */}
       <div className="px-3 pt-3 pb-2">
