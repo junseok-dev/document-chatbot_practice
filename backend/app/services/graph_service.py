@@ -7,7 +7,17 @@ from app.services.openai_service import STANDARD_REFUSAL, client, get_ai_respons
 from app.services.response_formatter import format_chat_response
 
 VERIFY_THRESHOLD = 3.5
+REJECT_THRESHOLD = 1.0  # 이 점수 미만이면 문서와 무관 → LLM 호출 건너뜀
 VERIFY_MODEL = "gpt-5-mini"
+
+OUT_OF_SCOPE_ANSWER = (
+    "그 부분은 제가 직접 도와드리기 어렵네요. 저는 엔코아AI캠퍼스 교육 과정 상담을 도와드리는 챗봇이에요.\n\n"
+    "대신 이런 부분은 바로 안내드릴 수 있어요.\n"
+    "• **AI 오케스트레이션 / ML 엔지니어 / MLOps 과정** 커리큘럼·기간\n"
+    "• **국민내일배움카드·훈련장려금** 혜택과 신청 절차\n"
+    "• **선발 방식·입과 일정·운영 규정** 안내\n\n"
+    "어떤 부분이 가장 궁금하세요?"
+)
 
 VERIFY_PROMPT = (
     "다음 [참고 문서]를 기준으로 [생성된 답변]을 검토하세요.\n"
@@ -27,16 +37,27 @@ class GraphState(TypedDict):
     llm_cost: float
     source: str
     needs_verification: bool
+    out_of_scope: bool
     channel_talk_url: str | None
 
 
 def retrieve_node(state: GraphState) -> dict:
     result = search_documents(state["query"])
+    out_of_scope = (not result.context) or (result.top_score < REJECT_THRESHOLD)
     return {
         "context": result.context,
         "chunks": result.chunks,
-        "source": "document" if result.context else "ai",
-        "needs_verification": result.top_score < VERIFY_THRESHOLD,
+        "source": "fallback" if out_of_scope else "document",
+        "needs_verification": (not out_of_scope) and result.top_score < VERIFY_THRESHOLD,
+        "out_of_scope": out_of_scope,
+    }
+
+
+def reject_node(state: GraphState) -> dict:
+    return {
+        "draft_answer": OUT_OF_SCOPE_ANSWER,
+        "final_answer": format_chat_response(OUT_OF_SCOPE_ANSWER, max_bubbles=3),
+        "llm_cost": 0.0,
     }
 
 
@@ -76,16 +97,22 @@ async def verify_node(state: GraphState) -> dict:
     return {"final_answer": final}
 
 
+def route_after_retrieve(state: GraphState) -> Literal["reject", "generate"]:
+    return "reject" if state.get("out_of_scope") else "generate"
+
+
 def should_verify(state: GraphState) -> Literal["verify", "__end__"]:
     return "verify" if state.get("needs_verification") else "__end__"
 
 
 _builder = StateGraph(GraphState)
 _builder.add_node("retrieve", retrieve_node)
+_builder.add_node("reject", reject_node)
 _builder.add_node("generate", generate_node)
 _builder.add_node("verify", verify_node)
 _builder.set_entry_point("retrieve")
-_builder.add_edge("retrieve", "generate")
+_builder.add_conditional_edges("retrieve", route_after_retrieve, {"reject": "reject", "generate": "generate"})
+_builder.add_edge("reject", END)
 _builder.add_conditional_edges("generate", should_verify, {"verify": "verify", "__end__": END})
 _builder.add_edge("verify", END)
 
@@ -107,6 +134,7 @@ async def run_rag_graph(
         "llm_cost": 0.0,
         "source": "ai",
         "needs_verification": False,
+        "out_of_scope": False,
         "channel_talk_url": channel_talk_url,
     }
     result = await rag_graph.ainvoke(initial)

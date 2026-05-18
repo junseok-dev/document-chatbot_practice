@@ -24,6 +24,13 @@ def _normalize_intent_text(message: str) -> str:
     return "".join((message or "").lower().split())
 
 
+def _with_handoff_link(text: str) -> str:
+    url = (get_settings().channel_talk_url or "").strip()
+    if not url or url in (text or ""):
+        return text
+    return f"{text}\n\n[채널톡 상담 매니저 연결하기]({url})"
+
+
 GREETING_ANSWER = (
     "안녕하세요!\n\n"
     "플레이데이터 상담봇입니다. 반갑습니다.\n\n"
@@ -162,13 +169,13 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         answer = blocked
         source = "guardrail"
     elif is_cancel_request(request.message):
-        answer = get_prompt_value("cancel_prompt")
+        answer = _with_handoff_link(get_prompt_value("cancel_prompt"))
         source = "handoff"
         processing_status = "handoff"
         db.add(CancelRequest(session_id=request.session_id, message=request.message, status="requested"))
         db.commit()
     elif is_handoff_request(request.message):
-        answer = get_prompt_value("handoff_prompt")
+        answer = _with_handoff_link(get_prompt_value("handoff_prompt"))
         source = "handoff"
         processing_status = "handoff"
     elif is_greeting(request.message):
@@ -208,7 +215,10 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         else:
             history = [{"role": h.role, "content": h.content} for h in request.history]
             try:
-                answer, llm_cost, source, retrieval_chunks = await run_rag_graph(request.message, history)
+                channel_talk_url = (get_settings().channel_talk_url or "").strip() or None
+                answer, llm_cost, source, retrieval_chunks = await run_rag_graph(
+                    request.message, history, channel_talk_url
+                )
             except Exception as exc:
                 answer = get_prompt_value("fallback_prompt")
                 source = "fallback"
@@ -286,16 +296,16 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                 processing_status = "handoff"
                 db.add(CancelRequest(session_id=request.session_id, message=request.message, status="requested"))
                 db.commit()
-                async for chunk in _stream_static(get_prompt_value("cancel_prompt")):
+                async for chunk in _stream_static(_with_handoff_link(get_prompt_value("cancel_prompt"))):
                     yield chunk
             elif is_handoff_request(request.message):
                 source = "handoff"
                 processing_status = "handoff"
-                async for chunk in _stream_static(get_prompt_value("handoff_prompt")):
+                async for chunk in _stream_static(_with_handoff_link(get_prompt_value("handoff_prompt"))):
                     yield chunk
             else:
                 history = [{"role": h.role, "content": h.content} for h in request.history]
-                channel_talk_url = get_settings().channel_talk_url if "채널톡" in request.message else None
+                channel_talk_url = (get_settings().channel_talk_url or "").strip() or None
                 try:
                     answer, _, source, retrieval_chunks = await run_rag_graph(request.message, history, channel_talk_url)
                     bubbles = [b for b in answer.split("\n\n") if b.strip()]
@@ -321,12 +331,12 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                 processing_status = "handoff"
                 db.add(CancelRequest(session_id=request.session_id, message=request.message, status="requested"))
                 db.commit()
-                async for chunk in _stream_static(get_prompt_value("cancel_prompt")):
+                async for chunk in _stream_static(_with_handoff_link(get_prompt_value("cancel_prompt"))):
                     yield chunk
             elif is_handoff_request(request.message):
                 source = "handoff"
                 processing_status = "handoff"
-                async for chunk in _stream_static(get_prompt_value("handoff_prompt")):
+                async for chunk in _stream_static(_with_handoff_link(get_prompt_value("handoff_prompt"))):
                     yield chunk
             elif is_greeting(request.message):
                 source = "faq"
@@ -368,8 +378,11 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                         yield chunk
                 else:
                     history = [{"role": h.role, "content": h.content} for h in request.history]
+                    channel_talk_url = (get_settings().channel_talk_url or "").strip() or None
                     try:
-                        answer, _, source, retrieval_chunks = await run_rag_graph(request.message, history)
+                        answer, _, source, retrieval_chunks = await run_rag_graph(
+                            request.message, history, channel_talk_url
+                        )
                         bubbles = [b for b in answer.split("\n\n") if b.strip()]
                         for idx, bubble in enumerate(bubbles):
                             if idx > 0:
