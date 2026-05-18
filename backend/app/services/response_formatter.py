@@ -15,8 +15,10 @@ def _clean_text(text: str) -> str:
     cleaned = re.sub(r"(?m)^[ \t]*[-*•][ \t]+", "- ", cleaned)
     # 연속된 목록 항목 사이의 빈 줄을 제거 → 한 ul로 묶이게 함
     cleaned = re.sub(r"(?m)(^- [^\n]+)\n+(?=- )", r"\1\n", cleaned)
-    cleaned = re.sub(r"\s*[–—]\s*", ". ", cleaned)
-    cleaned = re.sub(r"\s+-\s+", ". ", cleaned)
+    # m-dash 주변 공백만 정리 (보존). 줄바꿈은 건드리지 않음.
+    cleaned = re.sub(r" +[–—] +", " — ", cleaned)
+    # 인라인 hyphen만 마침표로 치환. \s가 줄바꿈을 매칭해 마크다운 목록을 깨뜨리던 버그 수정.
+    cleaned = re.sub(r" +- +", ". ", cleaned)
     cleaned = re.sub(r"[ \t]+", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     # 별표 정규화: ReactMarkdown이 인식 못하는 `** 단어 **` 형태를 `**단어**`로 고침
