@@ -56,7 +56,7 @@ def _sanitize_and_promote(answer: str, current_source: str) -> tuple[str, str]:
 
 GREETING_ANSWER = (
     "안녕하세요!\n\n"
-    "플레이데이터 상담봇입니다. 반갑습니다.\n\n"
+    "엔코아 ai 캠퍼스 상담봇입니다. 반갑습니다.\n\n"
     "**과정**, **수강 조건**, **비용**, **취업 지원**처럼 궁금한 내용을 편하게 물어봐 주세요."
 )
 
@@ -227,11 +227,11 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
                 source = "faq"
             else:
                 answer = (
-                    "플레이데이터 상담봇에서는 다음 카테고리의 질문을 도와드릴 수 있어요.\n\n"
+                    "엔코아 ai 캠퍼스 상담봇에서는 다음 카테고리의 질문을 도와드릴 수 있어요.\n\n"
                     "- **인터뷰/선발**: 면접 방식, 선발 기준, 추가선발 대기 안내\n"
                     "- **운영규정**: 수강 규정, 출결 기준, 수료 조건, 훈련장려금, 환불 정책\n"
                     "- **과정 상세**: 커리큘럼, 교육 기간, 비용, 취업 지원, 프리코스\n"
-                    "- **플레이데이터 정보**: 캠퍼스 위치·운영시간, 모집 일정, 기관 소개\n\n"
+                    "- **엔코아 ai 캠퍼스 정보**: 캠퍼스 위치·운영시간, 모집 일정, 기관 소개\n\n"
                     "궁금하신 내용을 구체적으로 질문해 주시면 더 정확하게 안내드릴게요!"
                 )
                 source = "faq"
@@ -251,7 +251,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
                 processing_status = "failed"
                 error_message = str(exc)
 
-    answer = format_chat_response(answer, max_bubbles=10 if source == "faq" else 3)
+    answer = format_chat_response(answer, max_bubbles=10 if source == "faq" else 6)
     save_message(db, request.session_id, "assistant", answer, source=source)
     db.add(
         ChatLog(
@@ -297,7 +297,7 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
         def _sse(data: dict) -> str:
             return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
-        async def _stream_static(text: str, max_bubbles: int = 3) -> None:
+        async def _stream_static(text: str, max_bubbles: int = 6) -> None:
             nonlocal full_answer
             full_answer = format_chat_response(text, max_bubbles=max_bubbles)
             bubbles = full_answer.split("\n\n")
@@ -403,11 +403,11 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                 if is_guide_query(request.message):
                     faq_answer = search_faq(request.message)
                     static_text = faq_answer if faq_answer else (
-                        "플레이데이터 상담봇에서는 다음 카테고리의 질문을 도와드릴 수 있어요.\n\n"
+                        "엔코아 ai 캠퍼스 상담봇에서는 다음 카테고리의 질문을 도와드릴 수 있어요.\n\n"
                         "- **인터뷰/선발**: 면접 방식, 선발 기준, 추가선발 대기 안내\n"
                         "- **운영규정**: 수강 규정, 출결 기준, 수료 조건, 훈련장려금, 환불 정책\n"
                         "- **과정 상세**: 커리큘럼, 교육 기간, 비용, 취업 지원, 프리코스\n"
-                        "- **플레이데이터 정보**: 캠퍼스 위치·운영시간, 모집 일정, 기관 소개\n\n"
+                        "- **엔코아 ai 캠퍼스 정보**: 캠퍼스 위치·운영시간, 모집 일정, 기관 소개\n\n"
                         "궁금하신 내용을 구체적으로 질문해 주시면 더 정확하게 안내드릴게요!"
                     )
                     source = "faq"

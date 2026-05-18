@@ -1,8 +1,10 @@
 import re
 
-MAX_BUBBLES = 3
+MAX_BUBBLES = 6
 
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?。！？])\s+")
+# `** 단어 **`, `** 단어**`, `**단어 **` 등 별표와 단어 사이 공백을 정규화
+_BOLD_WRAP = re.compile(r"\*\*\s*([^\*\n]+?)\s*\*\*")
 
 
 def _clean_text(text: str) -> str:
@@ -11,12 +13,14 @@ def _clean_text(text: str) -> str:
     cleaned = re.sub(r"(?m)^[ \t]{0,3}#{1,6}[ \t]*", "", cleaned)
     cleaned = re.sub(r"(?m)^[ \t]{0,3}>[ \t]*", "", cleaned)
     cleaned = re.sub(r"(?m)^[ \t]*[-*•][ \t]+", "• ", cleaned)
-    cleaned = re.sub(r"\s*[\u2013\u2014]\s*", ". ", cleaned)
+    cleaned = re.sub(r"\s*[–—]\s*", ". ", cleaned)
     cleaned = re.sub(r"\s+-\s+", ". ", cleaned)
     cleaned = re.sub(r"[ \t]+", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    # 별표 정규화: ReactMarkdown이 인식 못하는 `** 단어 **` 형태를 `**단어**`로 고침
+    cleaned = _BOLD_WRAP.sub(lambda m: f"**{m.group(1).strip()}**", cleaned)
     cleaned = re.sub(
-        r"^\s*(좋아요|네|알겠습니다|확인했습니다|좋은 질문이에요)\s*[-\u2013\u2014:]\s*",
+        r"^\s*(좋아요|네|알겠습니다|확인했습니다|좋은 질문이에요)\s*[-–—:]\s*",
         r"\1. ",
         cleaned,
     )

@@ -38,21 +38,21 @@
     },
     {
       "path": "playdata_intro.md",
-      "title": "플레이데이터 기관 정보 소개",
+      "title": "엔코아 ai 캠퍼스 기관 정보 소개",
       "category": "교육대상",
-      "source": "플레이데이터_기관정보_소개서.pdf"
+      "source": "엔코아 ai 캠퍼스_기관정보_소개서.pdf"
     },
     {
       "path": "campus_info.md",
-      "title": "플레이데이터 캠퍼스 정보",
+      "title": "엔코아 ai 캠퍼스 캠퍼스 정보",
       "category": "교육대상",
-      "source": "플레이데이터 캠퍼스 정보.pdf"
+      "source": "엔코아 ai 캠퍼스 캠퍼스 정보.pdf"
     },
     {
       "path": "homepage_intro.md",
-      "title": "플레이데이터 홈페이지 소개",
+      "title": "엔코아 ai 캠퍼스 홈페이지 소개",
       "category": "인터뷰 문의",
-      "source": "플레이데이터_홈페이지_소개.pdf"
+      "source": "엔코아 ai 캠퍼스_홈페이지_소개.pdf"
     }
   ],
   "categories": [
