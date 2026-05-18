@@ -42,9 +42,9 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
 
   if (isUser) {
     return (
-      <div className="flex justify-end items-end gap-1.5 mb-2 px-3 sm:px-4">
-        <span className="text-[10px] text-gray-400 mb-0.5 shrink-0">{timeString}</span>
-        <div className="max-w-[85%] sm:max-w-[78%] rounded-2xl rounded-br-sm bg-brand-500 px-3.5 py-2.5 sm:px-4 sm:py-3 text-[14.5px] sm:text-[15px] leading-[1.7] sm:leading-[1.75] text-white shadow-sm">
+      <div className="mb-2 flex items-end justify-end gap-1.5 px-3 sm:px-4">
+        <span className="mb-0.5 shrink-0 text-[10px] text-gray-400">{timeString}</span>
+        <div className="max-w-[85%] rounded-[1.75rem] rounded-br-md bg-gradient-to-br from-brand-500 to-cyan-500 px-3.5 py-2.5 text-[14.5px] leading-[1.7] text-white shadow-[0_14px_30px_rgba(37,99,235,0.22)] sm:max-w-[78%] sm:px-4 sm:py-3 sm:text-[15px] sm:leading-[1.75]">
           <div className="whitespace-pre-wrap break-keep">{message.content}</div>
         </div>
       </div>
@@ -52,25 +52,25 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
   }
 
   return (
-    <div className="flex items-start gap-2 sm:gap-2.5 mb-2 px-3 sm:px-4">
-      <div className="shrink-0 mt-1">
-        <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-brand-500 text-white text-xs font-bold shadow-sm">
+    <div className="mb-2 flex items-start gap-2 px-3 sm:gap-2.5 sm:px-4">
+      <div className="mt-1 shrink-0">
+        <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 to-cyan-500 text-xs font-bold text-white shadow-sm sm:h-10 sm:w-10">
           AI
         </div>
       </div>
 
-      <div className="flex flex-col max-w-[85%] sm:max-w-[82%]">
+      <div className="flex max-w-[85%] flex-col sm:max-w-[82%]">
         <span className="mb-1 text-[12px] font-semibold text-gray-600">엔코아AI캠퍼스</span>
         <div className="flex items-end gap-1.5">
           <div className="flex flex-col items-start gap-1.5">
             {isStreaming && assistantBubbles.length === 0 ? (
-              <div className="w-fit max-w-full rounded-2xl rounded-tl-sm bg-white px-3.5 py-2.5 sm:px-4 sm:py-3 text-[14.5px] sm:text-[15px] leading-[1.7] sm:leading-[1.75] text-gray-800 shadow-sm border border-gray-100">
+              <div className="w-fit max-w-full rounded-[1.75rem] rounded-tl-md border border-white/80 bg-white px-3.5 py-2.5 text-[14.5px] leading-[1.7] text-gray-800 shadow-[0_12px_28px_rgba(15,23,42,0.08)] sm:px-4 sm:py-3 sm:text-[15px] sm:leading-[1.75]">
                 <div className="flex items-center gap-2">
                   <span className="break-keep">{THINKING_STATUSES[statusIndex]}</span>
                   <span className="flex gap-0.5 pt-1">
-                    <span className="h-1 w-1 rounded-full bg-brand-400 animate-bounce [animation-delay:-0.3s]" />
-                    <span className="h-1 w-1 rounded-full bg-brand-400 animate-bounce [animation-delay:-0.15s]" />
-                    <span className="h-1 w-1 rounded-full bg-brand-400 animate-bounce" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-brand-400 [animation-delay:-0.3s]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-brand-400 [animation-delay:-0.15s]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-brand-400" />
                   </span>
                 </div>
               </div>
@@ -78,8 +78,8 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
               assistantBubbles.map((bubble, index) => (
                 <div
                   key={index}
-                  className={`w-fit max-w-full rounded-2xl bg-white px-3.5 py-2.5 sm:px-4 sm:py-3 text-[14.5px] sm:text-[15px] leading-[1.7] sm:leading-[1.75] text-gray-800 shadow-sm border border-gray-100 ${
-                    index === 0 ? 'rounded-tl-sm' : ''
+                  className={`w-fit max-w-full rounded-[1.75rem] border border-white/80 bg-white px-3.5 py-2.5 text-[14.5px] leading-[1.7] text-gray-800 shadow-[0_12px_28px_rgba(15,23,42,0.08)] sm:px-4 sm:py-3 sm:text-[15px] sm:leading-[1.75] ${
+                    index === 0 ? 'rounded-tl-md' : ''
                   }`}
                 >
                   <div className="whitespace-pre-wrap break-keep">
@@ -87,9 +87,7 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
                       components={{
                         p: ({ children }) => <span>{children}</span>,
                         strong: ({ children }) => <strong className="font-semibold text-gray-950">{children}</strong>,
-                        ul: ({ children }) => (
-                          <ul className="mt-1.5 space-y-2 list-none">{children}</ul>
-                        ),
+                        ul: ({ children }) => <ul className="mt-1.5 list-none space-y-2">{children}</ul>,
                         li: ({ children }) => (
                           <li className="flex gap-2">
                             <span className="mt-0.5 shrink-0 text-gray-500">•</span>
@@ -104,7 +102,7 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
                             className="font-medium text-brand-600 underline decoration-brand-300 underline-offset-2 hover:text-brand-700 hover:decoration-brand-500"
                           >
                             {children}
-                            <span className="ml-0.5 text-[10px] align-top">↗</span>
+                            <span className="ml-0.5 align-top text-[10px]">↗</span>
                           </a>
                         ),
                       }}
@@ -117,7 +115,7 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
             )}
 
             {message.source && !['fallback', 'handoff', 'guardrail'].includes(message.source) && (
-              <div className="px-1 text-[10px] text-gray-400 text-right">
+              <div className="px-1 text-right text-[10px] text-gray-400">
                 {message.source === 'faq' ? 'FAQ 답변' : 'AI 분석 답변'}
               </div>
             )}
@@ -129,7 +127,7 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
                     href={message.handoff_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600"
+                    className="inline-flex rounded-xl bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600"
                   >
                     상담 매니저 연결하기
                   </a>
@@ -141,7 +139,7 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
               </div>
             )}
           </div>
-          <span className="text-[10px] text-gray-400 mb-0.5 shrink-0">{timeString}</span>
+          <span className="mb-0.5 shrink-0 text-[10px] text-gray-400">{timeString}</span>
         </div>
       </div>
     </div>

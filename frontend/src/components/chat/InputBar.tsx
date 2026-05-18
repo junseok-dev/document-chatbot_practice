@@ -1,4 +1,4 @@
-import React, { useState, KeyboardEvent, useRef, useEffect } from 'react';
+import React, { KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { Send, Square } from 'lucide-react';
 
 interface Props {
@@ -39,27 +39,27 @@ const InputBar: React.FC<Props> = ({ onSendMessage, onStop, isLoading }) => {
   }, [input]);
 
   return (
-    <div className="shrink-0 border-t border-gray-200 bg-white px-3 py-2">
-      <div className="flex items-end gap-2 rounded-2xl border border-gray-200 bg-gray-50 px-3 py-2 transition-all focus-within:border-brand-400 focus-within:ring-1 focus-within:ring-brand-400">
+    <div className="shrink-0 border-t border-white/70 bg-white/75 px-3 py-3 backdrop-blur">
+      <div className="flex items-end gap-2 rounded-[1.75rem] border border-white/80 bg-white px-3 py-2.5 shadow-[0_12px_30px_rgba(15,23,42,0.08)] transition-all focus-within:border-brand-300 focus-within:ring-2 focus-within:ring-brand-200">
         <textarea
           ref={textareaRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="메시지를 입력하세요"
-          className="max-h-[100px] min-h-[22px] flex-1 resize-none border-none bg-transparent text-[14px] leading-relaxed placeholder-gray-400 focus:outline-none focus:ring-0"
+          className="max-h-[100px] min-h-[22px] flex-1 resize-none border-none bg-transparent px-1 text-[14px] leading-relaxed text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-0"
           rows={1}
         />
         <button
           onClick={handleSubmit}
           disabled={!input.trim() && !isLoading}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-white transition-colors hover:bg-brand-600 disabled:cursor-not-allowed disabled:bg-gray-200"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 to-cyan-500 text-white transition-transform hover:scale-[1.03] disabled:cursor-not-allowed disabled:from-slate-200 disabled:to-slate-200"
           aria-label={isLoading && !input.trim() ? '중지' : '전송'}
         >
           {isLoading && !input.trim() ? <Square size={14} fill="currentColor" /> : <Send size={15} />}
         </button>
       </div>
-      <p className="mt-1.5 text-center text-[10px] text-gray-400">
+      <p className="mt-2 text-center text-[10px] text-slate-400">
         엔코아AI캠퍼스 상담 챗봇은 실수가 있을 수 있습니다. 중요한 정보는 담당자에게 확인해 주세요.
       </p>
     </div>

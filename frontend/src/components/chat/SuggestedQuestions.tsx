@@ -18,7 +18,7 @@ const renderButton = (q: SuggestedQuestion, onSelect: (query: string) => void, d
         href={q.url}
         target="_blank"
         rel="noreferrer"
-        className="shrink-0 rounded-full border border-brand-400 bg-white px-3.5 py-1.5 text-[13px] font-medium text-brand-600 hover:bg-brand-50 transition-colors shadow-sm whitespace-nowrap"
+        className="shrink-0 whitespace-nowrap rounded-full border border-brand-200 bg-white px-3.5 py-2 text-[13px] font-medium text-brand-700 transition-colors shadow-sm hover:bg-brand-50"
       >
         {q.label}
       </a>
@@ -29,7 +29,7 @@ const renderButton = (q: SuggestedQuestion, onSelect: (query: string) => void, d
       key={q.id}
       onClick={() => onSelect(q.query)}
       disabled={disabled}
-      className="shrink-0 rounded-full border border-brand-300 bg-white px-3.5 py-1.5 text-[13px] font-medium text-brand-600 hover:bg-brand-50 hover:border-brand-400 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+      className="shrink-0 whitespace-nowrap rounded-full border border-brand-200 bg-white px-3.5 py-2 text-[13px] font-medium text-brand-700 shadow-sm transition-colors hover:border-brand-300 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50"
     >
       {q.label}
     </button>
