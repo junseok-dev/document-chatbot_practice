@@ -251,7 +251,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
                 processing_status = "failed"
                 error_message = str(exc)
 
-    answer = format_chat_response(answer, max_bubbles=10 if source == "faq" else 6)
+    answer = format_chat_response(answer, max_bubbles=10 if source == "faq" else 8)
     save_message(db, request.session_id, "assistant", answer, source=source)
     db.add(
         ChatLog(
@@ -297,7 +297,7 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
         def _sse(data: dict) -> str:
             return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
-        async def _stream_static(text: str, max_bubbles: int = 6) -> None:
+        async def _stream_static(text: str, max_bubbles: int = 8) -> None:
             nonlocal full_answer
             full_answer = format_chat_response(text, max_bubbles=max_bubbles)
             bubbles = full_answer.split("\n\n")

@@ -20,7 +20,7 @@ const FaqSection: React.FC<Props> = ({ items }) => {
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-brand-500">
               FAQ
             </p>
-            <h2 className="mt-1 text-lg font-bold text-slate-900">
+            <h2 className="mt-1 text-[1.2rem] font-bold text-slate-900">
               자주 묻는 질문
             </h2>
           </div>
@@ -43,7 +43,7 @@ const FaqSection: React.FC<Props> = ({ items }) => {
                   onClick={() => setOpenId(open ? '' : item.id)}
                   className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
                 >
-                  <span className="text-sm font-semibold leading-6 text-slate-900">
+                  <span className="text-[15.5px] font-semibold leading-7 text-slate-900 sm:text-base">
                     {item.question}
                   </span>
                   <ChevronDown
@@ -53,7 +53,7 @@ const FaqSection: React.FC<Props> = ({ items }) => {
                 </button>
 
                 {open && (
-                  <div className="border-t border-slate-200 bg-white px-4 py-4 text-sm leading-7 text-slate-700">
+                  <div className="border-t border-slate-200 bg-white px-4 py-4 text-[15px] leading-8 text-slate-700 sm:text-[15.5px]">
                     <ReactMarkdown
                       components={{
                         p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,

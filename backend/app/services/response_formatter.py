@@ -1,6 +1,6 @@
 import re
 
-MAX_BUBBLES = 6
+MAX_BUBBLES = 8
 
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?。！？])\s+")
 # `** 단어 **`, `** 단어**`, `**단어 **` 등 별표와 단어 사이 공백을 정규화

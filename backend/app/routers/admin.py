@@ -921,6 +921,8 @@ def browse_db_table(
         "page": page,
         "limit": limit,
         "editable": table_name in EDITABLE_TABLES,
+        "droppable": _is_droppable(table_name),
+        "restriction_reason": _restriction_reason(table_name),
         "protected_columns": sorted(PROTECTED_COLUMNS),
     }
 
@@ -940,6 +942,10 @@ ENCRYPT_AWARE_COLUMNS: dict[str, set[str]] = {
 
 # 수정·삭제 시 보호되는 컬럼 (편집 불가)
 PROTECTED_COLUMNS = {"id", "created_at", "updated_at"}
+
+# 테이블 자체를 DROP 가능한 화이트리스트 (시스템 영향 없음)
+DROPPABLE_TABLES = {"chat_logs", "processing_logs", "cancel_requests", "admin_audit_logs"}
+# cdata_* 동적 사용자 정의 테이블은 prefix 매칭으로 별도 허용
 
 
 class DbRowUpdate(BaseModel):
@@ -1025,6 +1031,65 @@ def delete_db_row(
 
     create_audit_log(db, "db_row_delete", table_name, str(row_id), "행 삭제")
     return {"message": "삭제되었습니다.", "table": table_name, "row_id": row_id}
+
+
+def _is_droppable(table_name: str) -> bool:
+    if table_name in DROPPABLE_TABLES:
+        return True
+    if table_name.startswith("cdata_"):
+        return True
+    return False
+
+
+def _restriction_reason(table_name: str) -> str | None:
+    """편집·삭제 불가 사유를 사람이 읽을 수 있는 문구로 반환. 가능한 테이블이면 None."""
+    if table_name in EDITABLE_TABLES or _is_droppable(table_name):
+        return None
+    reasons: dict[str, str] = {
+        "chunks": "RAG 검색 인덱스(FAISS)와 1:1로 묶여 있어 직접 수정하면 검색이 깨집니다. 문서 검토 탭에서 재인덱싱으로만 변경하세요.",
+        "documents": "원본 문서 메타. 문서 검토 탭의 승인·반려·삭제 흐름으로만 관리됩니다.",
+        "chat_messages": "사용자 대화 본체. 수정·삭제하면 대화 이력이 깨집니다.",
+        "chat_sessions": "세션 식별자. 변경 시 모든 메시지·로그가 끊깁니다.",
+        "admin_users": "관리자 권한 목록. 권한 관리 탭에서만 안전하게 수정하세요.",
+        "prompt_configs": "시스템 프롬프트. 프롬프트 탭에서 안전하게 편집하세요.",
+        "faqs": "FAQ 콘텐츠. FAQ 관리 탭에서 안전하게 편집하세요.",
+        "custom_tables": "사용자 정의 테이블 메타. 데이터 관리 탭에서 관리됩니다.",
+        "custom_columns": "사용자 정의 컬럼 정의. 데이터 관리 탭에서 관리됩니다.",
+    }
+    return reasons.get(table_name, "시스템 무결성 보호를 위해 직접 편집·삭제가 차단되어 있습니다.")
+
+
+@router.delete("/db/tables/{table_name}")
+def drop_db_table(
+    table_name: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    if not _is_droppable(table_name):
+        raise HTTPException(status_code=403, detail="이 테이블은 삭제할 수 없습니다.")
+
+    inspector = sa_inspect(db.bind)
+    if table_name not in inspector.get_table_names():
+        raise HTTPException(status_code=404, detail="테이블을 찾을 수 없습니다.")
+
+    # cdata_* 는 custom_tables 메타도 같이 정리
+    if table_name.startswith("cdata_"):
+        try:
+            cdata_id = int(table_name[len("cdata_"):])
+            db.execute(text("DELETE FROM custom_columns WHERE table_id = :tid"), {"tid": cdata_id})
+            db.execute(text("DELETE FROM custom_tables WHERE id = :tid"), {"tid": cdata_id})
+        except (ValueError, Exception):
+            pass
+
+    try:
+        db.execute(text(f'DROP TABLE IF EXISTS "{table_name}" CASCADE'))  # noqa: S608
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"테이블 삭제 실패: {exc}") from exc
+
+    create_audit_log(db, "db_table_drop", table_name, table_name, "테이블 DROP")
+    return {"message": f"{table_name} 테이블을 삭제했습니다.", "table": table_name}
 
 
 def _is_chat_model(model_id: str) -> bool:

@@ -47,7 +47,7 @@ const InputBar: React.FC<Props> = ({ onSendMessage, onStop, isLoading }) => {
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="메시지를 입력하세요"
-          className="max-h-[100px] min-h-[22px] flex-1 resize-none border-none bg-transparent px-1 text-[14px] leading-relaxed text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-0"
+          className="max-h-[100px] min-h-[24px] flex-1 resize-none border-none bg-transparent px-1 text-[15px] leading-[1.7] text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-0 sm:text-[15.5px]"
           rows={1}
         />
         <button
@@ -59,7 +59,7 @@ const InputBar: React.FC<Props> = ({ onSendMessage, onStop, isLoading }) => {
           {isLoading && !input.trim() ? <Square size={14} fill="currentColor" /> : <Send size={15} />}
         </button>
       </div>
-      <p className="mt-2 text-center text-[10px] text-slate-400">
+      <p className="mt-2 text-center text-[11px] text-slate-400">
         엔코아AI캠퍼스 상담 챗봇은 실수가 있을 수 있습니다. 중요한 정보는 담당자에게 확인해 주세요.
       </p>
     </div>

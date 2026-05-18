@@ -339,6 +339,11 @@ export const adminApi = {
     return response.data;
   },
 
+  dropDbTable: async (tableName: string): Promise<{ message: string }> => {
+    const response = await adminApiClient.delete(`/admin/db/tables/${tableName}`);
+    return response.data;
+  },
+
   exportDataTable: async (tableId: number, tableName: string): Promise<void> => {
     const response = await adminApiClient.get(`/admin/data-tables/${tableId}/export`, { responseType: 'blob' });
     const url = window.URL.createObjectURL(response.data);

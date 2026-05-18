@@ -824,6 +824,28 @@ export default function AdminPage() {
     }
   };
 
+  const handleDropDbTable = async () => {
+    if (!selectedDbTable) return;
+    const ok = window.confirm(
+      `⚠️ "${selectedDbTable}" 테이블을 통째로 삭제합니다.\n` +
+        `모든 데이터가 영구히 사라지며 되돌릴 수 없습니다.\n\n` +
+        `정말 진행하시겠습니까?`,
+    );
+    if (!ok) return;
+    try {
+      await adminApi.dropDbTable(selectedDbTable);
+      setNotice(`${selectedDbTable} 테이블 삭제 완료`);
+      setSelectedDbTable(null);
+      setDbTableData(null);
+      await loadDbTables();
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setNotice(msg || '테이블 삭제에 실패했습니다.');
+    }
+  };
+
   const handleDeleteDbRow = async (rowId: number) => {
     if (!selectedDbTable) return;
     if (!window.confirm(`${selectedDbTable} 테이블의 id=${rowId} 행을 삭제하시겠습니까? 되돌릴 수 없습니다.`)) return;
@@ -1560,11 +1582,28 @@ export default function AdminPage() {
                         );
                       })()}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <button onClick={() => void loadDbTableData(selectedDbTable, dbPage - 1)} disabled={dbPage <= 1} className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm disabled:opacity-30">← 이전</button>
                       <button onClick={() => void loadDbTableData(selectedDbTable, dbPage + 1)} disabled={dbPage * dbTableData.limit >= dbTableData.total} className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm disabled:opacity-30">다음 →</button>
+                      {dbTableData.droppable && (
+                        <button
+                          onClick={() => void handleDropDbTable()}
+                          className="rounded-xl bg-rose-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-rose-700"
+                          title="테이블 통째로 삭제 (영구)"
+                        >
+                          🗑 테이블 삭제
+                        </button>
+                      )}
                     </div>
                   </div>
+
+                  {/* 편집·삭제 불가 사유 안내 */}
+                  {!dbTableData.editable && dbTableData.restriction_reason && (
+                    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs text-amber-800">
+                      <span className="font-semibold">편집 불가 — </span>
+                      {dbTableData.restriction_reason}
+                    </div>
+                  )}
 
                   <div className="mt-4 overflow-x-auto">
                     <table className="w-full text-sm">

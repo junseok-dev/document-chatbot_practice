@@ -213,6 +213,8 @@ export interface DbTableData {
   columns: string[];
   rows: Record<string, unknown>[];
   editable?: boolean;
+  droppable?: boolean;
+  restriction_reason?: string | null;
   protected_columns?: string[];
   total: number;
   page: number;
