@@ -38,6 +38,18 @@ def _ensure_text_columns(engine: Engine) -> None:
                 connection.execute(text(f"ALTER TABLE {table_name} ALTER COLUMN {name} TYPE TEXT"))
 
 
+def _drop_legacy_tables(engine: Engine) -> None:
+    """폐기된 레거시 테이블 정리. cdata_* 도입(2026-05-16) 이전 EAV 방식."""
+    legacy_tables = ("custom_rows",)
+    inspector = inspect(engine)
+    existing = set(inspector.get_table_names())
+    for table_name in legacy_tables:
+        if table_name not in existing:
+            continue
+        with engine.begin() as connection:
+            connection.execute(text(f"DROP TABLE IF EXISTS {table_name} CASCADE"))
+
+
 def migrate_database(engine: Engine) -> None:
     inspector = inspect(engine)
 
@@ -53,3 +65,4 @@ def migrate_database(engine: Engine) -> None:
                 connection.execute(text(f"ALTER TABLE documents ADD COLUMN {column_name} {column_sql}"))
 
     _ensure_text_columns(engine)
+    _drop_legacy_tables(engine)

@@ -169,11 +169,3 @@ class CustomColumn(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
-class CustomRow(Base):
-    __tablename__ = "custom_rows"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    table_id = Column(Integer, ForeignKey("custom_tables.id"), nullable=False, index=True)
-    data = Column(Text, nullable=False, default="{}")  # JSON {"column_name": value}
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

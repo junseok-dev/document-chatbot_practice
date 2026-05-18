@@ -194,6 +194,9 @@ export default function AdminPage() {
   const [dbTables, setDbTables] = useState<DbTableMeta[]>([]);
   const [selectedDbTable, setSelectedDbTable] = useState<string | null>(null);
   const [dbTableData, setDbTableData] = useState<DbTableData | null>(null);
+  const [editingDbRow, setEditingDbRow] = useState<{ row: Record<string, unknown>; rowId: number } | null>(null);
+  const [editingDbValues, setEditingDbValues] = useState<Record<string, string>>({});
+  const [savingDbRow, setSavingDbRow] = useState(false);
   const [dbPage, setDbPage] = useState(1);
   const [dbLoading, setDbLoading] = useState(false);
 
@@ -766,6 +769,60 @@ export default function AdminPage() {
     setSelectedDbTable(tableName);
     setDbPage(1);
     await loadDbTableData(tableName, 1);
+  };
+
+  const openEditDbRow = (row: Record<string, unknown>, rowId: number) => {
+    const protectedCols = new Set(dbTableData?.protected_columns ?? []);
+    const initial: Record<string, string> = {};
+    for (const col of dbTableData?.columns ?? []) {
+      if (protectedCols.has(col)) continue;
+      const v = row[col];
+      initial[col] = v === null || v === undefined ? '' : String(v);
+    }
+    setEditingDbValues(initial);
+  };
+
+  // editingDbRow가 바뀌면 폼 초기화
+  useEffect(() => {
+    if (editingDbRow) {
+      openEditDbRow(editingDbRow.row, editingDbRow.rowId);
+    } else {
+      setEditingDbValues({});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingDbRow]);
+
+  const handleSaveDbRow = async () => {
+    if (!editingDbRow || !selectedDbTable) return;
+    setSavingDbRow(true);
+    try {
+      await adminApi.updateDbRow(selectedDbTable, editingDbRow.rowId, editingDbValues);
+      setNotice('수정되었습니다.');
+      setEditingDbRow(null);
+      await loadDbTableData(selectedDbTable, dbPage);
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setNotice(msg || '수정에 실패했습니다.');
+    } finally {
+      setSavingDbRow(false);
+    }
+  };
+
+  const handleDeleteDbRow = async (rowId: number) => {
+    if (!selectedDbTable) return;
+    if (!window.confirm(`${selectedDbTable} 테이블의 id=${rowId} 행을 삭제하시겠습니까? 되돌릴 수 없습니다.`)) return;
+    try {
+      await adminApi.deleteDbRow(selectedDbTable, rowId);
+      setNotice('삭제되었습니다.');
+      await loadDbTableData(selectedDbTable, dbPage);
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setNotice(msg || '삭제에 실패했습니다.');
+    }
   };
 
   const documentRows = useMemo(
@@ -1494,6 +1551,9 @@ export default function AdminPage() {
                           {dbTableData.columns.map((col) => (
                             <th key={col} className="pb-2 pr-4 text-left text-xs font-medium text-slate-500 whitespace-nowrap">{col}</th>
                           ))}
+                          {dbTableData.editable && (
+                            <th className="pb-2 pr-2 text-right text-xs font-medium text-slate-500 whitespace-nowrap">작업</th>
+                          )}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
@@ -1507,10 +1567,28 @@ export default function AdminPage() {
                                 <td key={col} className="py-2 pr-4 text-xs text-slate-700 whitespace-nowrap" title={str}>{truncated}</td>
                               );
                             })}
+                            {dbTableData.editable && (
+                              <td className="py-2 pr-2 text-right whitespace-nowrap">
+                                <button
+                                  onClick={() => setEditingDbRow({ row, rowId: Number(row.id) })}
+                                  className="mr-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-100"
+                                  title="수정"
+                                >
+                                  ✏️
+                                </button>
+                                <button
+                                  onClick={() => void handleDeleteDbRow(Number(row.id))}
+                                  className="rounded-md border border-rose-200 px-2 py-1 text-[11px] text-rose-600 hover:bg-rose-50"
+                                  title="삭제"
+                                >
+                                  🗑
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         ))}
                         {dbTableData.rows.length === 0 && (
-                          <tr><td colSpan={dbTableData.columns.length} className="py-6 text-center text-slate-400">데이터가 없습니다.</td></tr>
+                          <tr><td colSpan={dbTableData.columns.length + (dbTableData.editable ? 1 : 0)} className="py-6 text-center text-slate-400">데이터가 없습니다.</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -1951,6 +2029,42 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+
+      {/* DB 브라우저 행 편집 모달 */}
+      {editingDbRow && selectedDbTable && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setEditingDbRow(null)}>
+          <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-semibold text-slate-900">행 수정 — {selectedDbTable}</h3>
+                <p className="mt-0.5 text-xs text-slate-500">id = {editingDbRow.rowId} · 보호 컬럼(id·created_at·updated_at)은 수정할 수 없습니다.</p>
+              </div>
+              <button onClick={() => setEditingDbRow(null)} className="rounded-full p-1 text-slate-400 hover:bg-slate-100">✕</button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {Object.keys(editingDbValues).map((col) => (
+                <div key={col}>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">{col}</label>
+                  <textarea
+                    value={editingDbValues[col]}
+                    onChange={(e) => setEditingDbValues((prev) => ({ ...prev, [col]: e.target.value }))}
+                    rows={editingDbValues[col].length > 80 ? 4 : 1}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
+              <button onClick={() => setEditingDbRow(null)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50" disabled={savingDbRow}>취소</button>
+              <button onClick={() => void handleSaveDbRow()} disabled={savingDbRow} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50">
+                {savingDbRow ? '저장 중...' : '저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

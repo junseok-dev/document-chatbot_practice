@@ -53,7 +53,6 @@ TABLE_DESCRIPTIONS: dict[str, str] = {
     "admin_audit_logs": "관리자 감사 로그 — 누가, 무엇을, 언제 수행했는지",
     "custom_tables": "사용자 정의 테이블 메타데이터 (데이터 관리 탭에서 생성한 테이블 목록)",
     "custom_columns": "사용자 정의 테이블 컬럼 정의",
-    "custom_rows": "구형 EAV 방식 데이터 행 (현재 cdata_* 테이블 사용)",
 }
 
 
@@ -915,7 +914,117 @@ def browse_db_table(
         return v
 
     rows = [dict(zip(columns, [_serialize(v) for v in row])) for row in rows_result]
-    return {"columns": columns, "rows": rows, "total": total, "page": page, "limit": limit}
+    return {
+        "columns": columns,
+        "rows": rows,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "editable": table_name in EDITABLE_TABLES,
+        "protected_columns": sorted(PROTECTED_COLUMNS),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# DB 브라우저 행 편집·삭제 (안전한 4개 테이블만 화이트리스트)
+# ─────────────────────────────────────────────────────────────────────────
+
+EDITABLE_TABLES = {"faqs", "chat_logs", "processing_logs", "cancel_requests"}
+
+# 저장 시 카테고리 토글 상태에 따라 enc:: 자동 처리되는 컬럼
+ENCRYPT_AWARE_COLUMNS: dict[str, set[str]] = {
+    "faqs": {"category", "question", "answer", "keywords_json", "aliases_json", "search_hints_json", "source_files_json"},
+    "chat_logs": {"question", "answer", "retrieval_chunks", "error"},
+    # processing_logs / cancel_requests는 평문 저장
+}
+
+# 수정·삭제 시 보호되는 컬럼 (편집 불가)
+PROTECTED_COLUMNS = {"id", "created_at", "updated_at"}
+
+
+class DbRowUpdate(BaseModel):
+    values: dict[str, object]
+
+
+@router.put("/db/tables/{table_name}/rows/{row_id}")
+def update_db_row(
+    table_name: str,
+    row_id: int,
+    body: DbRowUpdate,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    if table_name not in EDITABLE_TABLES:
+        raise HTTPException(status_code=403, detail="이 테이블은 편집할 수 없습니다.")
+
+    inspector = sa_inspect(db.bind)
+    if table_name not in inspector.get_table_names():
+        raise HTTPException(status_code=404, detail="테이블을 찾을 수 없습니다.")
+
+    valid_columns = {col["name"] for col in inspector.get_columns(table_name)}
+    enc_columns = ENCRYPT_AWARE_COLUMNS.get(table_name, set())
+
+    updates: dict[str, object] = {}
+    for col, raw_value in body.values.items():
+        if col in PROTECTED_COLUMNS or col not in valid_columns:
+            continue
+        value = raw_value
+        if isinstance(value, str) and col in enc_columns:
+            value = maybe_encrypt(value)
+        updates[col] = value
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="수정할 컬럼이 없습니다.")
+
+    set_clause = ", ".join([f'"{k}" = :{k}' for k in updates])
+    params = {**updates, "row_id": row_id}
+    result = db.execute(
+        text(f'UPDATE "{table_name}" SET {set_clause} WHERE id = :row_id'),  # noqa: S608
+        params,
+    )
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="행을 찾을 수 없습니다.")
+    db.commit()
+
+    create_audit_log(
+        db,
+        "db_row_update",
+        table_name,
+        str(row_id),
+        f"수정된 컬럼: {', '.join(updates.keys())}",
+    )
+    return {"message": "수정되었습니다.", "table": table_name, "row_id": row_id, "updated": list(updates.keys())}
+
+
+@router.delete("/db/tables/{table_name}/rows/{row_id}")
+def delete_db_row(
+    table_name: str,
+    row_id: int,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    if table_name not in EDITABLE_TABLES:
+        raise HTTPException(status_code=403, detail="이 테이블은 삭제할 수 없습니다.")
+
+    inspector = sa_inspect(db.bind)
+    if table_name not in inspector.get_table_names():
+        raise HTTPException(status_code=404, detail="테이블을 찾을 수 없습니다.")
+
+    try:
+        result = db.execute(
+            text(f'DELETE FROM "{table_name}" WHERE id = :row_id'),  # noqa: S608
+            {"row_id": row_id},
+        )
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"삭제 실패: {exc}") from exc
+
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="행을 찾을 수 없습니다.")
+    db.commit()
+
+    create_audit_log(db, "db_row_delete", table_name, str(row_id), "행 삭제")
+    return {"message": "삭제되었습니다.", "table": table_name, "row_id": row_id}
 
 
 def _is_chat_model(model_id: str) -> bool:

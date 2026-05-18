@@ -212,6 +212,8 @@ export interface DbTableMeta {
 export interface DbTableData {
   columns: string[];
   rows: Record<string, unknown>[];
+  editable?: boolean;
+  protected_columns?: string[];
   total: number;
   page: number;
   limit: number;
