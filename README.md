@@ -19,6 +19,7 @@
 11. [관리자 대시보드 기능](#11-관리자-대시보드-기능)
 12. [RAGAS 품질 평가](#12-rag-품질-평가-결과-ragas)
 13. [디렉토리 구조](#13-디렉토리-구조)
+14. [로컬 개발 환경](#14-로컬-개발-환경)
 
 ---
 
@@ -832,6 +833,129 @@ document-chatbot_practice/
 │
 └── scripts/                        ← 유틸리티 스크립트 (PDF 처리 등)
 ```
+
+---
+
+## 14. 로컬 개발 환경
+
+### 사전 요구사항
+
+- **Python 3.12+**
+- **Node.js 18+** (Vite 5 호환)
+- OpenAI API 키 (`OPENAI_API_KEY`)
+- AWS 자격증명 (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`)
+- (선택) Google OAuth Client ID — 관리자 페이지 로그인 테스트용
+
+### 환경변수 (`backend/.env`)
+
+```env
+# OpenAI
+OPENAI_API_KEY=sk-...
+
+# Database (Aurora RDS 또는 로컬 PostgreSQL)
+DATABASE_URL=postgresql://user:password@host:5432/chatbot
+
+# AWS
+AWS_REGION=ap-northeast-2
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_S3_BUCKET=your-bucket-name
+AWS_S3_PREFIX=document-chatbot
+
+# 보안
+ENCRYPTION_KEY=<Fernet 키, 32바이트 base64>
+JWT_SECRET=<무작위 문자열, 32자 이상>
+
+# 관리자 부트스트랩
+ADMIN_EMAIL=you@example.com
+GOOGLE_CLIENT_ID=<Google OAuth 클라이언트 ID>
+
+# 채널톡·홈페이지
+CHANNEL_TALK_URL=https://...
+HOMEPAGE_URL=https://encorecampus.ai/
+
+# LangSmith (선택)
+LANGSMITH_API_KEY=...
+LANGSMITH_PROJECT=document-chatbot
+LANGSMITH_TRACING_V2=true
+```
+
+`backend/.env.example`을 복사해서 시작하세요. ENCRYPTION_KEY는 다음으로 생성:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+### 백엔드 실행
+
+```bash
+cd backend
+
+# 가상환경 생성 (최초 1회)
+python -m venv venv
+
+# 활성화
+# Windows
+venv\Scripts\activate
+# macOS/Linux
+source venv/bin/activate
+
+# 의존성 설치
+pip install -r requirements.txt
+
+# 서버 시작 (포트 8888)
+python -m uvicorn app.main:app --reload --port 8888 --host 0.0.0.0
+```
+
+→ <http://localhost:8888>
+→ API 문서: <http://localhost:8888/docs>
+
+### 프론트엔드 실행
+
+```bash
+cd frontend
+
+# 의존성 설치 (최초 1회)
+npm install
+
+# 개발 서버 시작 (포트 5173, HMR 지원)
+npm run dev
+```
+
+→ <http://localhost:5173>
+
+### 한 번에 실행 (Windows)
+
+루트의 두 스크립트 중 편한 걸 사용:
+
+```bash
+# CMD
+start_servers.bat
+
+# PowerShell
+.\start_servers.ps1
+```
+
+각각 백엔드·프론트 터미널 두 개가 자동으로 열립니다. 브라우저로 <http://localhost:5173> 접속.
+
+### 자주 쓰는 명령
+
+| 작업 | 명령 |
+|------|------|
+| 백엔드 의존성 추가 | `pip install <패키지> && pip freeze > requirements.txt` |
+| 프론트 타입체크 + 빌드 | `npm run build` (`tsc && vite build`) |
+| 프론트 린트 | `npm run lint` |
+| DB 스키마 자동 적용 | 백엔드 시작 시 `migrate_database()` 자동 실행 |
+| FAISS 인덱스 재구성 | 관리자 페이지 → 문서 검토 → "🗑 FAISS 인덱스 재구성" |
+| SQLite → RDS 마이그레이션 | `cd backend && python scripts/migrate_sqlite_to_rds.py` |
+
+### 트러블슈팅
+
+- **포트 충돌**: 8888·5173이 이미 사용 중이면 `--port` 옵션 또는 `vite.config.ts`에서 변경
+- **DB 연결 실패**: `DATABASE_URL` 확인. RDS 사용 시 보안그룹에 로컬 IP 허용 필요
+- **OpenAI 401**: API 키 만료 또는 사용량 초과
+- **FAISS 인덱스 없음**: 서버 첫 시작 시 S3에서 다운로드. S3 권한 또는 버킷명 확인
+- **관리자 로그인 실패**: `ADMIN_EMAIL`이 `.env`에 설정돼 있는지 + Google OAuth Client ID가 같은 도메인(localhost)에 등록돼 있는지
 
 ---
 

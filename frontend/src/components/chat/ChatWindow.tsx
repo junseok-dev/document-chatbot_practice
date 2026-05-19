@@ -12,6 +12,7 @@ interface Props {
   sendMessage: (content: string) => void;
   stopGenerating: () => void;
   convId?: string;
+  scrollToMessageId?: string | null;
 }
 
 const SCROLL_STORAGE_PREFIX = 'chatScroll:v1:';
@@ -25,12 +26,30 @@ const ChatWindow: React.FC<Props> = ({
   sendMessage,
   stopGenerating,
   convId,
+  scrollToMessageId,
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const hasRestoredRef = useRef(false);
   const isNearBottomRef = useRef(true);
   const scrollKey = `${SCROLL_STORAGE_PREFIX}${convId ?? 'default'}`;
+
+  // 외부에서 특정 메시지로 점프 요청이 오면 해당 메시지로 스크롤 + 잠시 강조
+  useEffect(() => {
+    if (!scrollToMessageId) return;
+    const el = messageRefs.current[scrollToMessageId];
+    if (!el) return;
+    const timer = setTimeout(() => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('ring-2', 'ring-brand-400', 'ring-offset-2', 'rounded-2xl');
+      const removeHighlight = setTimeout(() => {
+        el.classList.remove('ring-2', 'ring-brand-400', 'ring-offset-2', 'rounded-2xl');
+      }, 1800);
+      return () => clearTimeout(removeHighlight);
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [scrollToMessageId, messages]);
 
   useEffect(() => {
     hasRestoredRef.current = false;
@@ -76,11 +95,17 @@ const ChatWindow: React.FC<Props> = ({
         className="flex-1 overflow-y-auto px-1 py-4 space-y-0.5"
       >
         {messages.map((message) => (
-          <MessageBubble
+          <div
             key={message.id}
-            message={message}
-            isStreaming={message.id === streamingMessageId && message.content === ''}
-          />
+            ref={(el) => {
+              messageRefs.current[message.id] = el;
+            }}
+          >
+            <MessageBubble
+              message={message}
+              isStreaming={message.id === streamingMessageId && message.content === ''}
+            />
+          </div>
         ))}
 
         {showLoadingDots && (

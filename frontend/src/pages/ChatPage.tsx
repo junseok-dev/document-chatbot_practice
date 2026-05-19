@@ -19,6 +19,7 @@ const ChatPage: React.FC = () => {
     convId,
   } = useChat();
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [scrollToMessageId, setScrollToMessageId] = useState<string | null>(null);
   const historyBtnRef = useRef<HTMLButtonElement>(null);
 
   return (
@@ -74,6 +75,7 @@ const ChatPage: React.FC = () => {
               sendMessage={sendMessage}
               stopGenerating={stopGenerating}
               convId={convId}
+              scrollToMessageId={scrollToMessageId}
             />
           </div>
         </main>
@@ -81,7 +83,10 @@ const ChatPage: React.FC = () => {
         <HistoryDropdown
           open={historyOpen}
           onClose={() => setHistoryOpen(false)}
-          onSelect={(conv: Conversation) => loadConversation(conv)}
+          onSelect={(conv: Conversation, messageId?: string) => {
+            loadConversation(conv);
+            if (messageId) setScrollToMessageId(messageId);
+          }}
           currentConvId={convId}
           anchorRef={historyBtnRef}
         />
