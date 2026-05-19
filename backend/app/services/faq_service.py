@@ -278,15 +278,24 @@ def match_button_faq(query: str) -> str | None:
     return None
 
 
-def match_faq_general(query: str, threshold: float = 6.0) -> str | None:
-    """일반 대화에서 direct_answer FAQ와 충분히 매칭될 때 답변 반환."""
+def match_faq_general(query: str, threshold: float = 7.5) -> str | None:
+    """일반 대화에서 direct_answer FAQ와 충분히 매칭될 때 답변 반환.
+
+    카테고리 안내성 FAQ(`category == '카테고리 안내'` 또는 keywords에 `질문 추천` 포함)는
+    is_guide_query 통과해야만 매칭되도록 차단 → 일반 질문이 가이드 답변으로 잘못 빠지는 사고 방지.
+    """
     matched = match_faq(query)
     if not matched:
         return None
     score, faq = matched
-    if faq.get("direct_answer") and score >= threshold:
-        return faq.get("answer")
-    return None
+    if not faq.get("direct_answer") or score < threshold:
+        return None
+    keywords = faq.get("keywords", [])
+    category = faq.get("category", "")
+    is_guide_faq = (category == "카테고리 안내") or any("질문 추천" in k for k in keywords)
+    if is_guide_faq and not is_guide_query(query):
+        return None
+    return faq.get("answer")
 
 
 def get_suggested_questions() -> list[dict]:
