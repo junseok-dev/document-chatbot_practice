@@ -23,6 +23,8 @@ def _clean_text(text: str) -> str:
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     # 별표 정규화: ReactMarkdown이 인식 못하는 `** 단어 **` 형태를 `**단어**`로 고침
     cleaned = _BOLD_WRAP.sub(lambda m: f"**{m.group(1).strip()}**", cleaned)
+    # **강조** 헤더로 시작하는 줄 앞에 빈 줄을 강제 → 각 강조 헤더 단위로 paragraph(말풍선) 분리
+    cleaned = re.sub(r"(?<!\n)\n(?=\*\*[^\n]+\*\*)", "\n\n", cleaned)
     cleaned = re.sub(
         r"^\s*(좋아요|네|알겠습니다|확인했습니다|좋은 질문이에요)\s*[-–—:]\s*",
         r"\1. ",

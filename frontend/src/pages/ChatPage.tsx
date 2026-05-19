@@ -22,8 +22,8 @@ const ChatPage: React.FC = () => {
   const historyBtnRef = useRef<HTMLButtonElement>(null);
 
   return (
-    <div className="flex min-h-screen items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(96,165,250,0.28),_transparent_34%),linear-gradient(180deg,_#f8fbff_0%,_#edf4ff_48%,_#e7eefb_100%)] px-3 py-4 sm:px-6 sm:py-8">
-      <div className="relative flex h-[calc(100vh-1.5rem)] w-full max-w-[520px] flex-col overflow-hidden rounded-[2.25rem] border border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(241,247,255,0.92))] shadow-[0_24px_80px_rgba(15,23,42,0.18)] sm:h-[min(920px,calc(100vh-4rem))]">
+    <div className="flex min-h-screen items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(96,165,250,0.28),_transparent_34%),linear-gradient(180deg,_#f8fbff_0%,_#edf4ff_48%,_#e7eefb_100%)] px-3 py-2 sm:px-6 sm:py-4">
+      <div className="relative flex h-[calc(100vh-1rem)] w-full max-w-[520px] flex-col overflow-hidden rounded-[2.25rem] border border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(241,247,255,0.92))] shadow-[0_24px_80px_rgba(15,23,42,0.18)] sm:h-[min(1080px,calc(100vh-2rem))]">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.22),_transparent_70%)]" />
 
         <header className="relative z-10 shrink-0 border-b border-white/70 bg-white/70 shadow-sm backdrop-blur">
