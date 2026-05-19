@@ -230,6 +230,33 @@ def match_faq(query: str) -> tuple[float, dict] | None:
     return best_score, best_faq
 
 
+# 다중 도메인 의도 감지 — 한 질문에 서로 다른 카테고리 키워드가 2개 이상이면 FAQ 매칭 건너뛰고 RAG로 보냄
+_DOMAIN_GROUPS: dict[str, list[str]] = {
+    "location": ["위치", "주소", "어디", "캠퍼스", "g밸리", "g벨리", "가산", "오프라인"],
+    "device": ["노트북", "사양", "장비", "기기", "컴퓨터"],
+    "cost": ["비용", "수강료", "본인부담", "훈련비", "얼마"],
+    "benefit": ["훈련장려금", "지원금", "혜택", "장려금", "내일배움카드"],
+    "time": ["운영시간", "수업시간", "몇 시", "몇시", "시간표"],
+    "rule": ["출결", "결석", "보강", "지각", "출석률", "수료 조건"],
+    "interview": ["인터뷰", "면접", "선발", "지원서"],
+    "course": ["과정", "커리큘럼", "수업 내용", "프리코스"],
+    "career": ["취업", "진로", "직무", "채용"],
+    "schedule": ["일정", "개강", "모집", "기수"],
+}
+
+
+def is_multi_intent(query: str) -> bool:
+    """질문에 서로 다른 도메인 키워드가 2개 이상 등장하면 True (FAQ 단일 매칭 부적합)."""
+    normalized = _normalize(query)
+    hits = 0
+    for kws in _DOMAIN_GROUPS.values():
+        if any(kw in normalized for kw in kws):
+            hits += 1
+            if hits >= 2:
+                return True
+    return False
+
+
 def is_guide_query(query: str) -> bool:
     normalized = _normalize(query)
     guide_signals = [
@@ -269,6 +296,9 @@ def search_faq(query: str) -> str | None:
 
 def match_button_faq(query: str) -> str | None:
     """버튼 클릭처럼 쿼리가 FAQ 질문과 정확히 일치할 때 direct_answer 반환."""
+    # 다중 도메인 의도면 단일 FAQ로 답변 부적합 → RAG로 보냄
+    if is_multi_intent(query):
+        return None
     matched = match_faq(query)
     if not matched:
         return None
@@ -283,7 +313,10 @@ def match_faq_general(query: str, threshold: float = 7.5) -> str | None:
 
     카테고리 안내성 FAQ(`category == '카테고리 안내'` 또는 keywords에 `질문 추천` 포함)는
     is_guide_query 통과해야만 매칭되도록 차단 → 일반 질문이 가이드 답변으로 잘못 빠지는 사고 방지.
+    또한 다중 도메인 의도(예: '위치+노트북')는 FAQ 단일 매칭 부적합 → RAG로 보냄.
     """
+    if is_multi_intent(query):
+        return None
     matched = match_faq(query)
     if not matched:
         return None
