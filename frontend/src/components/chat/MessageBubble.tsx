@@ -87,13 +87,13 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
                       components={{
                         p: ({ children }) => <span>{children}</span>,
                         strong: ({ children }) => <strong className="font-semibold text-gray-950">{children}</strong>,
-                        ul: ({ children }) => <ul className="mt-1.5 list-none space-y-2">{children}</ul>,
-                        li: ({ children }) => (
-                          <li className="flex gap-2">
-                            <span className="mt-0.5 shrink-0 text-gray-500">•</span>
-                            <span className="min-w-0 flex-1">{children}</span>
-                          </li>
+                        ul: ({ children }) => (
+                          <ul className="mt-1.5 ml-5 list-disc space-y-3 marker:text-gray-400">{children}</ul>
                         ),
+                        ol: ({ children }) => (
+                          <ol className="mt-1.5 ml-5 list-decimal space-y-3 marker:text-gray-400">{children}</ol>
+                        ),
+                        li: ({ children }) => <li className="pl-1">{children}</li>,
                         a: ({ href, children }) => (
                           <a
                             href={href}
