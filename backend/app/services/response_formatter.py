@@ -45,57 +45,22 @@ def _split_paragraph(paragraph: str) -> list[str]:
     return sentences or ([paragraph.strip()] if paragraph.strip() else [])
 
 
-# 한 paragraph 안 줄 수가 이보다 많으면 자동으로 추가 분리(말풍선 쪼개기)
-LONG_PARAGRAPH_LINE_THRESHOLD = 3
-# 자동 분리할 때 한 말풍선이 가질 줄 수
-CHUNK_LINES = 2
-
-
-def _split_long_paragraph(paragraph: str) -> list[str]:
-    """paragraph 안에 \\n이 많으면 CHUNK_LINES 줄씩 묶어 여러 말풍선으로 분리.
-    단, `- ` 불릿 줄(목록)은 한 덩어리로 유지해서 ul이 깨지지 않게 함."""
-    lines = paragraph.split("\n")
-    if len(lines) <= LONG_PARAGRAPH_LINE_THRESHOLD:
-        return [paragraph]
-
-    chunks: list[list[str]] = []
-    current: list[str] = []
-    in_list = False
-    list_re = re.compile(r"^\s*(?:[-*•]|\d+\.)\s+")
-    for line in lines:
-        is_list_item = bool(list_re.match(line))
-        if is_list_item:
-            in_list = True
-            current.append(line)
-            continue
-        if in_list:
-            chunks.append(current)
-            current = [line]
-            in_list = False
-            continue
-        current.append(line)
-        if len(current) >= CHUNK_LINES:
-            chunks.append(current)
-            current = []
-    if current:
-        chunks.append(current)
-
-    return ["\n".join(ch).strip() for ch in chunks if ch and "\n".join(ch).strip()]
-
-
 def format_chat_response(text: str, max_bubbles: int = MAX_BUBBLES) -> str:
     cleaned = _clean_text(text)
     if not cleaned:
         return ""
 
+    # paragraph break(빈 줄, \n\n) 기준으로만 말풍선 분리.
+    # 같은 paragraph 안 내용(마침표 줄바꿈 포함)은 절대 쪼개지 않고 한 말풍선에 통째로 유지.
     paragraphs = [part.strip() for part in re.split(r"\n{2,}", cleaned) if part.strip()]
     if not paragraphs:
         return ""
 
-    # 각 paragraph가 너무 길면 (\n이 많으면) 추가 분리
-    expanded: list[str] = []
-    for p in paragraphs:
-        expanded.extend(_split_long_paragraph(p))
+    if len(paragraphs) > 1:
+        bubbles = paragraphs[:max_bubbles]
+    elif "\n" in paragraphs[0]:
+        bubbles = [paragraphs[0]]
+    else:
+        bubbles = _split_paragraph(paragraphs[0])[:max_bubbles]
 
-    bubbles = expanded[:max_bubbles] if expanded else paragraphs[:max_bubbles]
     return "\n\n".join(bubbles)
