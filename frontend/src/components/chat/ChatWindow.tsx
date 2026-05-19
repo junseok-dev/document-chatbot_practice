@@ -1,7 +1,5 @@
 import React, { useEffect, useRef } from 'react';
 import { Message, SuggestedQuestion } from '../../types';
-import { faqItems } from '../../data/faqs';
-import FaqSection from './FaqSection';
 import InputBar from './InputBar';
 import MessageBubble from './MessageBubble';
 import SuggestedQuestions from './SuggestedQuestions';
@@ -68,7 +66,6 @@ const ChatWindow: React.FC<Props> = ({
   };
 
   const showSuggestions = !isLoading && messages[messages.length - 1]?.role === 'assistant';
-  const showFaqs = messages.length === 1 && messages[0]?.id === 'welcome';
   const showLoadingDots = isLoading && !streamingMessageId;
 
   return (
@@ -85,8 +82,6 @@ const ChatWindow: React.FC<Props> = ({
             isStreaming={message.id === streamingMessageId && message.content === ''}
           />
         ))}
-
-        {showFaqs && <FaqSection items={faqItems} />}
 
         {showLoadingDots && (
           <div className="mb-1 flex items-start gap-2.5 px-4">
