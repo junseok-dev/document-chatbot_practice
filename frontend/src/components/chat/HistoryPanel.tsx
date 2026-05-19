@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Search, X, MessageSquare } from 'lucide-react';
+import { ChevronLeft, ChevronRight, MessageSquare, Search, X } from 'lucide-react';
 import { Conversation } from '../../types';
 import { useConversations } from '../../hooks/useChat';
 
@@ -38,6 +38,12 @@ const getSnippet = (conv: Conversation, keyword: string): string => {
   return (start > 0 ? '…' : '') + match.content.slice(start, end) + (end < match.content.length ? '…' : '');
 };
 
+const countMatches = (conv: Conversation, keyword: string): number => {
+  if (!keyword.trim()) return 0;
+  const lower = keyword.toLowerCase();
+  return conv.messages.filter((m) => m.content.toLowerCase().includes(lower)).length;
+};
+
 const formatDate = (iso: string) => {
   const d = new Date(iso);
   const now = new Date();
@@ -50,14 +56,17 @@ const HistoryDropdown: React.FC<Props> = ({ open, onClose, onSelect, currentConv
   const [keyword, setKeyword] = useState('');
   const { search, refresh } = useConversations();
   const [results, setResults] = useState<Conversation[]>([]);
+  const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const itemRefs = useRef<Array<HTMLLIElement | null>>([]);
 
   useEffect(() => {
     if (open) {
       refresh();
       setResults([]);
       setKeyword('');
+      setActiveIndex(0);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [open]);
@@ -69,7 +78,13 @@ const HistoryDropdown: React.FC<Props> = ({ open, onClose, onSelect, currentConv
       return;
     }
     setResults(search(trimmed));
+    setActiveIndex(0);
   }, [keyword]);
+
+  // active 항목이 보이도록 스크롤
+  useEffect(() => {
+    itemRefs.current[activeIndex]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [activeIndex]);
 
   // outside-click: 패널과 토글 버튼 둘 다 제외
   useEffect(() => {
@@ -84,6 +99,33 @@ const HistoryDropdown: React.FC<Props> = ({ open, onClose, onSelect, currentConv
   }, [open, onClose, anchorRef]);
 
   if (!open) return null;
+
+  const goPrev = () => {
+    if (results.length === 0) return;
+    setActiveIndex((i) => (i > 0 ? i - 1 : results.length - 1));
+  };
+  const goNext = () => {
+    if (results.length === 0) return;
+    setActiveIndex((i) => (i < results.length - 1 ? i + 1 : 0));
+  };
+
+  const handleKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
+    if (results.length === 0) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      goNext();
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      goPrev();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const target = results[activeIndex];
+      if (target) {
+        onSelect(target);
+        onClose();
+      }
+    }
+  };
 
   const anchorRect = anchorRef.current?.getBoundingClientRect();
   const top = (anchorRect?.bottom ?? 64) + 8;
@@ -104,7 +146,8 @@ const HistoryDropdown: React.FC<Props> = ({ open, onClose, onSelect, currentConv
             type="text"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            placeholder="키워드 입력..."
+            onKeyDown={handleKeyDown}
+            placeholder="키워드 입력... (↑↓로 이동, Enter로 선택)"
             className="flex-1 bg-transparent text-[13px] focus:outline-none placeholder-gray-400"
           />
           {keyword && (
@@ -115,6 +158,31 @@ const HistoryDropdown: React.FC<Props> = ({ open, onClose, onSelect, currentConv
         </div>
       </div>
 
+      {/* Result navigation: < n/m > */}
+      {results.length > 0 && (
+        <div className="flex items-center justify-between border-y border-gray-100 bg-gray-50 px-3 py-1.5">
+          <button
+            onClick={goPrev}
+            className="rounded-md p-1 text-gray-500 hover:bg-white hover:text-gray-900"
+            aria-label="이전 결과"
+            disabled={results.length <= 1}
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <span className="text-[11px] font-medium text-gray-600">
+            {activeIndex + 1} / {results.length} 매칭
+          </span>
+          <button
+            onClick={goNext}
+            className="rounded-md p-1 text-gray-500 hover:bg-white hover:text-gray-900"
+            aria-label="다음 결과"
+            disabled={results.length <= 1}
+          >
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      )}
+
       {/* Results */}
       <div className="max-h-64 overflow-y-auto">
         {results.length === 0 ? (
@@ -124,14 +192,31 @@ const HistoryDropdown: React.FC<Props> = ({ open, onClose, onSelect, currentConv
           </div>
         ) : (
           <ul className="pb-2">
-            {results.map((conv) => {
+            {results.map((conv, idx) => {
               const snippet = getSnippet(conv, keyword);
-              const isActive = conv.id === currentConvId;
+              const matchCount = countMatches(conv, keyword);
+              const isActive = idx === activeIndex;
+              const isCurrent = conv.id === currentConvId;
               return (
-                <li key={conv.id}>
+                <li
+                  key={conv.id}
+                  ref={(el) => {
+                    itemRefs.current[idx] = el;
+                  }}
+                >
                   <button
-                    onClick={() => { onSelect(conv); onClose(); }}
-                    className={`w-full text-left px-4 py-2.5 transition-colors hover:bg-gray-50 ${isActive ? 'bg-brand-50 border-l-2 border-l-brand-500' : ''}`}
+                    onClick={() => {
+                      setActiveIndex(idx);
+                      onSelect(conv);
+                      onClose();
+                    }}
+                    className={`w-full text-left px-4 py-2.5 transition-colors ${
+                      isActive
+                        ? 'bg-brand-50 border-l-2 border-l-brand-500'
+                        : isCurrent
+                          ? 'bg-gray-50 border-l-2 border-l-gray-300'
+                          : 'hover:bg-gray-50'
+                    }`}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-[13px] font-medium text-gray-800 line-clamp-1 flex-1">
@@ -141,6 +226,9 @@ const HistoryDropdown: React.FC<Props> = ({ open, onClose, onSelect, currentConv
                     </div>
                     {snippet && (
                       <p className="mt-0.5 text-[11px] text-gray-500 line-clamp-1">{highlight(snippet, keyword)}</p>
+                    )}
+                    {matchCount > 1 && (
+                      <p className="mt-0.5 text-[10px] text-brand-600">+{matchCount - 1}개 메시지에 더 매칭</p>
                     )}
                   </button>
                 </li>

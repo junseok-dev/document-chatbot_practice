@@ -278,11 +278,17 @@ export const useConversations = () => {
     const convs = loadConversations();
     if (!keyword.trim()) return convs;
     const lower = keyword.toLowerCase();
-    return convs.filter(
-      (c) =>
-        c.title.toLowerCase().includes(lower) ||
-        c.messages.some((m) => m.content.toLowerCase().includes(lower)),
-    );
+    return convs
+      // welcome만 있는 빈 대화 제외 (사용자 메시지가 하나라도 있어야 의미 있는 대화)
+      .filter((c) => c.messages.some((m) => m.role === 'user'))
+      // 키워드 매칭 (제목 또는 메시지 본문)
+      .filter(
+        (c) =>
+          c.title.toLowerCase().includes(lower) ||
+          c.messages.some((m) => m.content.toLowerCase().includes(lower)),
+      )
+      // 최신순 정렬
+      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
   }, []);
 
   return { conversations, refresh, search };
