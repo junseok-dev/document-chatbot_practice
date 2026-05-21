@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { Message, SuggestedQuestion } from '../../types';
 import InputBar from './InputBar';
 import MessageBubble from './MessageBubble';
@@ -33,7 +34,12 @@ const ChatWindow: React.FC<Props> = ({
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const hasRestoredRef = useRef(false);
   const isNearBottomRef = useRef(true);
+  const [showScrollDown, setShowScrollDown] = useState(false);
   const scrollKey = `${SCROLL_STORAGE_PREFIX}${convId ?? 'default'}`;
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  };
 
   // 외부에서 특정 메시지로 점프 요청이 오면 해당 메시지로 스크롤 + 잠시 강조
   useEffect(() => {
@@ -81,6 +87,7 @@ const ChatWindow: React.FC<Props> = ({
     if (!container || !hasRestoredRef.current) return;
     const distanceFromBottom = container.scrollHeight - (container.scrollTop + container.clientHeight);
     isNearBottomRef.current = distanceFromBottom < NEAR_BOTTOM_THRESHOLD;
+    setShowScrollDown(distanceFromBottom > 240);
     sessionStorage.setItem(scrollKey, String(container.scrollTop));
   };
 
@@ -88,7 +95,7 @@ const ChatWindow: React.FC<Props> = ({
   const showLoadingDots = isLoading && !streamingMessageId;
 
   return (
-    <div className="flex h-full flex-col bg-transparent">
+    <div className="relative flex h-full flex-col bg-transparent">
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
@@ -128,6 +135,16 @@ const ChatWindow: React.FC<Props> = ({
 
         <div ref={messagesEndRef} className="h-2" />
       </div>
+
+      {showScrollDown && (
+        <button
+          onClick={scrollToBottom}
+          aria-label="맨 아래로 이동"
+          className="absolute bottom-32 right-4 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-white/80 bg-white/95 text-gray-600 shadow-[0_6px_18px_rgba(15,23,42,0.18)] backdrop-blur transition-transform hover:scale-105 hover:text-gray-900"
+        >
+          <ChevronDown size={20} />
+        </button>
+      )}
 
       {showSuggestions && (
         <div className="shrink-0 border-t border-white/70 bg-white/70 px-3 py-2 backdrop-blur sm:px-4 sm:py-2.5">

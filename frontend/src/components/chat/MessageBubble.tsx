@@ -114,12 +114,6 @@ const MessageBubble: React.FC<Props> = ({ message, isStreaming = false }) => {
               ))
             )}
 
-            {message.source && !['fallback', 'handoff', 'guardrail'].includes(message.source) && (
-              <div className="px-1 text-right text-[10px] text-gray-400">
-                {message.source === 'faq' ? 'FAQ 답변' : 'AI 분석 답변'}
-              </div>
-            )}
-
             {message.source === 'handoff' && (
               <div className="mt-1">
                 {message.handoff_url ? (
