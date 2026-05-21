@@ -46,6 +46,27 @@ def update_counseling_prompt(db: Session) -> None:
     db.commit()
 
 
+def update_handoff_prompts(db: Session) -> None:
+    """채널톡 연결 워딩(상담 운영시간 포함)을 강제로 default로 동기화."""
+    settings = get_settings()
+    for key, default_value in (
+        ("cancel_prompt", settings.default_cancel_prompt),
+        ("handoff_prompt", settings.default_handoff_prompt),
+    ):
+        record = db.query(PromptConfig).filter(PromptConfig.prompt_key == key).first()
+        if record:
+            record.content = maybe_encrypt(default_value)
+        else:
+            db.add(
+                PromptConfig(
+                    prompt_key=key,
+                    label=PROMPT_DEFAULTS[key][0],
+                    content=maybe_encrypt(default_value),
+                )
+            )
+    db.commit()
+
+
 def _get_prompt_value(db: Session, prompt_key: str) -> str:
     seed_prompt_configs(db)
     prompt = db.query(PromptConfig).filter(PromptConfig.prompt_key == prompt_key).first()

@@ -84,7 +84,7 @@ const ChatWindow: React.FC<Props> = ({
     sessionStorage.setItem(scrollKey, String(container.scrollTop));
   };
 
-  const showSuggestions = !isLoading && messages[messages.length - 1]?.role === 'assistant';
+  const showSuggestions = !isLoading;
   const showLoadingDots = isLoading && !streamingMessageId;
 
   return (

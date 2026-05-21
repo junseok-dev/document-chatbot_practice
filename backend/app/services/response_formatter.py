@@ -5,6 +5,10 @@ MAX_BUBBLES = 8
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?。！？])\s+")
 # `** 단어 **`, `** 단어**`, `**단어 **` 등 별표와 단어 사이 공백을 정규화
 _BOLD_WRAP = re.compile(r"\*\*\s*([^\*\n]+?)\s*\*\*")
+# `**(ZOOM, 약 20분)**가` 처럼 닫는 별표 앞이 punctuation, 뒤가 한글/영문/숫자면
+# CommonMark의 right-flanking 규칙 위반으로 볼드가 적용되지 않아 별표가 그대로 노출됨.
+# 닫는 `**` 뒤에 NBSP(U+00A0, Unicode whitespace)를 삽입해 규칙을 만족시킴.
+_BOLD_CLOSE_FIX = re.compile(r"(\*\*[^*\n]+?[^\w\s*])\*\*(?=[\w가-힣])")
 
 
 def _clean_text(text: str) -> str:
@@ -23,6 +27,8 @@ def _clean_text(text: str) -> str:
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     # 별표 정규화: ReactMarkdown이 인식 못하는 `** 단어 **` 형태를 `**단어**`로 고침
     cleaned = _BOLD_WRAP.sub(lambda m: f"**{m.group(1).strip()}**", cleaned)
+    # `**…)**한글` 처럼 punct 닫기 + 한글 이어붙음 → NBSP 삽입으로 볼드 적용 보장
+    cleaned = _BOLD_CLOSE_FIX.sub(lambda m: f"{m.group(1)}** ", cleaned)
     # **강조** 헤더로 시작하는 줄 앞에 빈 줄을 강제 → 각 강조 헤더 단위로 paragraph(말풍선) 분리
     cleaned = re.sub(r"(?<!\n)\n(?=\*\*[^\n]+\*\*)", "\n\n", cleaned)
     # **강조** 헤더 줄 뒤에도 빈 줄 강제 → 다음에 오는 목록(- 또는 1.)이 별도 paragraph로 인식되어 ul/ol 변환됨

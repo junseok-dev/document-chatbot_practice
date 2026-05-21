@@ -156,20 +156,29 @@ def is_cancel_request(message: str) -> bool:
 
     schedule_signals = [
         "일정변경",
+        "일정바꾸",
         "날짜변경",
+        "날짜바꾸",
         "개강변경",
+        "개강바꾸",
         "연기",
         "미루고",
         "다음기수",
         "다른기수",
         "변경하고싶",
+        "바꾸고싶",
+        "바꿀수있",
         "옮기고싶",
+        "인터뷰시간변경",
+        "인터뷰시간바꾸",
+        "면접시간변경",
+        "면접시간바꾸",
     ]
     if any(signal in normalized for signal in schedule_signals):
         return True
 
-    combined_topics = ["수강", "등록", "신청", "결제", "과정", "교육", "개강", "기수"]
-    combined_actions = ["취소", "환불", "철회", "해지", "연기", "변경", "옮기", "미루"]
+    combined_topics = ["수강", "등록", "신청", "결제", "과정", "교육", "개강", "기수", "인터뷰", "면접"]
+    combined_actions = ["취소", "환불", "철회", "해지", "연기", "변경", "바꾸", "옮기", "미루"]
     return any(topic in normalized for topic in combined_topics) and any(
         action in normalized for action in combined_actions
     )

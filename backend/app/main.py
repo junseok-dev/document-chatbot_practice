@@ -11,7 +11,7 @@ from app.db.database import SessionLocal, engine
 from app.db.migrations import migrate_database
 from app.routers import admin, auth, chat
 from app.services.faq_service import seed_faqs
-from app.services.prompt_service import seed_prompt_configs, update_counseling_prompt
+from app.services.prompt_service import seed_prompt_configs, update_counseling_prompt, update_handoff_prompts
 from app.services.rag_service import get_rag_service
 from app.services.storage_service import ensure_storage_dirs
 
@@ -27,6 +27,7 @@ async def lifespan(app: FastAPI):
         seed_faqs(db)
         seed_prompt_configs(db)
         update_counseling_prompt(db)
+        update_handoff_prompts(db)
         get_rag_service().index_all(db)
     finally:
         db.close()

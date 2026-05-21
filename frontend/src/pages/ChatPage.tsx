@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Search } from 'lucide-react';
+import { ArrowLeft, Home, Search } from 'lucide-react';
 import ChatWindow from '../components/chat/ChatWindow';
 import HistoryDropdown from '../components/chat/HistoryPanel';
 import { useChat } from '../hooks/useChat';
@@ -50,18 +50,30 @@ const ChatPage: React.FC = () => {
               </div>
             </div>
 
-            <button
-              ref={historyBtnRef}
-              onClick={() => setHistoryOpen((v) => !v)}
-              className={`flex shrink-0 items-center gap-1.5 rounded-2xl border px-3 py-2 text-sm transition-colors ${
-                historyOpen
-                  ? 'border-brand-300 bg-brand-50 text-brand-700'
-                  : 'border-white/80 bg-white/80 text-gray-600 hover:bg-white hover:text-gray-900'
-              }`}
-            >
-              <Search size={15} />
-              <span className="text-[13px]">기록</span>
-            </button>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <a
+                href="https://encorecampus.ai/"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 rounded-2xl border border-white/80 bg-white/80 px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-white hover:text-gray-900"
+                aria-label="엔코아 AI 캠퍼스 홈페이지"
+              >
+                <Home size={15} />
+                <span className="text-[13px]">홈</span>
+              </a>
+              <button
+                ref={historyBtnRef}
+                onClick={() => setHistoryOpen((v) => !v)}
+                className={`flex items-center gap-1.5 rounded-2xl border px-3 py-2 text-sm transition-colors ${
+                  historyOpen
+                    ? 'border-brand-300 bg-brand-50 text-brand-700'
+                    : 'border-white/80 bg-white/80 text-gray-600 hover:bg-white hover:text-gray-900'
+                }`}
+              >
+                <Search size={15} />
+                <span className="text-[13px]">기록</span>
+              </button>
+            </div>
           </div>
         </header>
 
