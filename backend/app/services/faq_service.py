@@ -230,18 +230,20 @@ def match_faq(query: str) -> tuple[float, dict] | None:
     return best_score, best_faq
 
 
-# 다중 도메인 의도 감지 — 한 질문에 서로 다른 카테고리 키워드가 2개 이상이면 FAQ 매칭 건너뛰고 RAG로 보냄
+# 다중 도메인 의도 감지 — 한 질문에 서로 다른 카테고리 키워드가 2개 이상이면 FAQ 매칭 건너뛰고 RAG로 보냄.
+# 너무 일반적인 키워드("캠퍼스", "과정")는 "엔코아 AI 캠퍼스 ~ 과정 ~" 같은 정상 질문에서도 매칭되어
+# 단일 FAQ 답변을 부당하게 차단하므로 제외함.
 _DOMAIN_GROUPS: dict[str, list[str]] = {
-    "location": ["위치", "주소", "어디", "캠퍼스", "g밸리", "g벨리", "가산", "오프라인"],
-    "device": ["노트북", "사양", "장비", "기기", "컴퓨터"],
+    "location": ["위치", "주소", "어디", "g밸리", "g벨리", "가산", "동작역", "오프라인"],
+    "device": ["노트북", "사양", "장비", "기기", "컴퓨터", "맥북"],
     "cost": ["비용", "수강료", "본인부담", "훈련비", "얼마"],
     "benefit": ["훈련장려금", "지원금", "혜택", "장려금", "내일배움카드"],
     "time": ["운영시간", "수업시간", "몇 시", "몇시", "시간표"],
     "rule": ["출결", "결석", "보강", "지각", "출석률", "수료 조건"],
-    "interview": ["인터뷰", "면접", "선발", "지원서"],
-    "course": ["과정", "커리큘럼", "수업 내용", "프리코스"],
+    "interview": ["인터뷰", "면접"],
+    "curriculum": ["커리큘럼", "수업 내용", "프리코스", "사전학습"],
     "career": ["취업", "진로", "직무", "채용"],
-    "schedule": ["일정", "개강", "모집", "기수"],
+    "schedule": ["개강일", "모집 일정", "기수 일정"],
 }
 
 
@@ -295,10 +297,11 @@ def search_faq(query: str) -> str | None:
 
 
 def match_button_faq(query: str) -> str | None:
-    """버튼 클릭처럼 쿼리가 FAQ 질문과 정확히 일치할 때 direct_answer 반환."""
-    # 다중 도메인 의도면 단일 FAQ로 답변 부적합 → RAG로 보냄
-    if is_multi_intent(query):
-        return None
+    """버튼 클릭처럼 쿼리가 FAQ 질문과 정확히 일치할 때 direct_answer 반환.
+
+    score >= 10.0 은 question/alias 정확 일치 수준의 강한 매칭이므로 의도가 명확함 →
+    multi-intent 체크를 우회한다. 약한 매칭만 multi-intent 차단 대상.
+    """
     matched = match_faq(query)
     if not matched:
         return None
@@ -313,10 +316,8 @@ def match_faq_general(query: str, threshold: float = 7.5) -> str | None:
 
     카테고리 안내성 FAQ(`category == '카테고리 안내'` 또는 keywords에 `질문 추천` 포함)는
     is_guide_query 통과해야만 매칭되도록 차단 → 일반 질문이 가이드 답변으로 잘못 빠지는 사고 방지.
-    또한 다중 도메인 의도(예: '위치+노트북')는 FAQ 단일 매칭 부적합 → RAG로 보냄.
+    score < 10.0 인 약한 매칭은 다중 도메인 의도(예: '위치+노트북')일 때 RAG로 보낸다.
     """
-    if is_multi_intent(query):
-        return None
     matched = match_faq(query)
     if not matched:
         return None
@@ -327,6 +328,9 @@ def match_faq_general(query: str, threshold: float = 7.5) -> str | None:
     category = faq.get("category", "")
     is_guide_faq = (category == "카테고리 안내") or any("질문 추천" in k for k in keywords)
     if is_guide_faq and not is_guide_query(query):
+        return None
+    # 강한 매칭(score >= 10)은 명확한 의도 — multi-intent 우회. 약한 매칭만 차단.
+    if score < 10.0 and is_multi_intent(query):
         return None
     return faq.get("answer")
 
